@@ -1,7 +1,8 @@
 /** Cinema's native Pi session and bounded CLI capability; the existing bridge owns Telegram. */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { Type } from "@sinclair/typebox";
@@ -14,6 +15,8 @@ const executeFile = promisify(execFile);
 export const cinemaTarget = Object.freeze({ chatId: -1003985826484, threadId: 3 });
 const actions = ["search", "series", "episodes", "releases", "download", "download-season", "downloads", "stop", "remove", "library", "item", "refresh"];
 const sources = ["all", "lostfilm", "rutor", "nnm", "rutracker"];
+const memoryFiles = ["alex.md", "maru.md", "watchlist.md"];
+const cinemaTools = ["botflix", "family_memory"];
 const help = "Кино: ищу фильмы и сериалы, управляю загрузками и проверяю Jellyfin.\n/new — новая кино-сессия\n/compact — сжать историю\n/stop — остановить ответ и очистить очередь\n/model — модель; /model provider/model — переключить";
 
 export function cinemaArguments(p) {
@@ -125,6 +128,34 @@ export const botflixTool = {
   },
 };
 
+export const familyMemoryTool = {
+  name: "family_memory", label: "Семейная память",
+  description: "Read or update only alex.md, maru.md and watchlist.md. Read before writing, preserve existing facts, save only confirmed participant statements or requested watchlist changes. No other paths are accessible.",
+  parameters: Type.Object({
+    action: Type.Union([Type.Literal("read"), Type.Literal("write")]),
+    file: Type.Union(memoryFiles.map(file => Type.Literal(file))),
+    content: Type.Optional(Type.String()), expectedSha256: Type.Optional(Type.String()),
+  }, { additionalProperties: false }),
+  async execute(_id, p) {
+    if (!memoryFiles.includes(p.file) || !["read", "write"].includes(p.action)) throw new Error("Unsupported family memory file or action");
+    const path = join(homedir(), ".local/share/family", p.file);
+    const before = readFileSync(path, "utf8");
+    const digest = value => createHash("sha256").update(value).digest("hex");
+    if (p.action === "read") return { content: [{ type: "text", text: JSON.stringify({ file: p.file, content: before, sha256: digest(before) }) }], details: {} };
+    if (p.expectedSha256 !== digest(before)) throw new Error("Family memory changed; read the current file before writing");
+    if (typeof p.content !== "string" || !p.content.trim() || p.content.includes("\0") ||
+        p.content.length > (p.file === "watchlist.md" ? 60000 : 6000)) throw new Error("Invalid family memory contents");
+    const temporary = `${path}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(temporary, p.content, { flag: "wx", mode: 0o600 });
+      if (digest(readFileSync(path, "utf8")) !== p.expectedSha256) throw new Error("Family memory changed during writing; reread it");
+      renameSync(temporary, path);
+    } finally { if (existsSync(temporary)) unlinkSync(temporary); }
+    if (readFileSync(path, "utf8") !== p.content) throw new Error("Family memory write could not be verified");
+    return { content: [{ type: "text", text: JSON.stringify({ file: p.file, saved: true, sha256: digest(p.content) }) }], details: {} };
+  },
+};
+
 export async function createCinemaRuntime(root, agentDir, sessionDir) {
   const cwd = join(homedir(), "projects/home/cli-botlix");
   return createAgentSessionRuntime(async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
@@ -133,16 +164,16 @@ export async function createCinemaRuntime(root, agentDir, sessionDir) {
       systemPrompt: readFileSync(join(root, "agent/CINEMA.md"), "utf8"),
       extensionFactories: [pi => {
         pi.on("before_agent_start", event => ({ systemPrompt: event.systemPrompt + "\n<family_preferences>\n" +
-          ["alex.md", "maru.md", "watchlist.md"].map(name =>
+          memoryFiles.map(name =>
             `${name}:\n${readFileSync(join(homedir(), ".local/share/family", name), "utf8")}`).join("\n\n") +
           "\n</family_preferences>" }));
       }],
     } });
     const result = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent,
-      tools: ["botflix"], customTools: [botflixTool] });
-    if (result.session.getActiveToolNames().join() !== "botflix" || result.extensionsResult.extensions.length !== 1 || result.extensionsResult.errors.length) throw new Error("Cinema tool isolation failed");
+      tools: cinemaTools, customTools: [botflixTool, familyMemoryTool] });
+    if (result.session.getActiveToolNames().sort().join() !== cinemaTools.join() || result.extensionsResult.extensions.length !== 1 || result.extensionsResult.errors.length) throw new Error("Cinema tool isolation failed");
     await result.session.bindExtensions({ mode: "rpc" });
-    if (result.session.getActiveToolNames().join() !== "botflix") throw new Error("Cinema tool isolation changed after binding");
+    if (result.session.getActiveToolNames().sort().join() !== cinemaTools.join()) throw new Error("Cinema tool isolation changed after binding");
     const file = sessionManager.getSessionFile();
     if (file && !existsSync(file)) {
       writeFileSync(file, [sessionManager.getHeader(), ...sessionManager.getEntries()].map(entry => JSON.stringify(entry)).join("\n") + "\n", { flag: "wx", mode: 0o600 });

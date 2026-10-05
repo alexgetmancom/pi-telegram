@@ -18,7 +18,7 @@ For an unexpectedly inaccessible site, update its domain entry in `network-issue
 
 ## Topics
 
-The AI topic is the general family assistant with host tools. The Cinema topic has its own history and a restricted botflix tool. Media conversations belong there; no conversation history is automatically shared between topics.
+The AI topic is the general family assistant with host tools. The Cinema topic has its own history, botflix for media and family_memory for exactly alex.md, maru.md and watchlist.md. These three preference files are shared; conversation histories are not automatically shared between topics.
 
 ## Host and services
 

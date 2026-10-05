@@ -11,10 +11,12 @@ import test from "node:test";
 
 import {
   buildTelegramInboundHandlerInvocation,
+  bindTelegramVoiceInputRuntime,
   clearTelegramInboundHandlers,
   processTelegramInboundHandlers,
   registerTelegramInboundHandler,
   telegramInboundHandlerMatchesFile,
+  transcribeTelegramVoiceMessage,
 } from "../lib/inbound.ts";
 import {
   clearTelegramVoiceTranscriptionProviders,
@@ -24,6 +26,26 @@ import {
 test.beforeEach(() => {
   clearTelegramInboundHandlers();
   clearTelegramVoiceTranscriptionProviders();
+});
+
+test("Companion voice input reuses configured STT and returns text without file paths", async () => {
+  const downloaded: string[] = [];
+  bindTelegramVoiceInputRuntime({
+    getAllowedChatId: () => -1007,
+    async downloadFile(id) { downloaded.push(id); return "/tmp/voice.ogg"; },
+    getHandlers: () => [{ mime: "audio/*", template: '/tools/stt "{file}"' }],
+    async execCommand(command, args) {
+      assert.equal(command, "/tools/stt"); assert.deepEqual(args, ["/tmp/voice.ogg"]);
+      return { stdout: "Найди Сёгун", stderr: "", code: 0, killed: false };
+    },
+  });
+  const message = { message_id: 1, chat: { id: -1007, type: "supergroup" }, from: { id: 7, is_bot: false },
+    voice: { file_id: "voice", mime_type: "audio/ogg" }, document: { file_id: "unrelated" } };
+  assert.equal(await transcribeTelegramVoiceMessage(message, "/cinema"), "Найди Сёгун");
+  assert.deepEqual(downloaded, ["voice"]);
+  await assert.rejects(transcribeTelegramVoiceMessage({ ...message, chat: { id: -1008, type: "supergroup" } }, "/cinema"));
+  await assert.rejects(transcribeTelegramVoiceMessage({ ...message, from: { id: 7, is_bot: true } }, "/cinema"));
+  assert.deepEqual(downloaded, ["voice"]);
 });
 
 test("Inbound handlers match MIME wildcards and Telegram file types", () => {

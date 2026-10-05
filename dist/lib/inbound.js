@@ -7,6 +7,29 @@ import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { buildCommandTemplateInvocation, expandCommandTemplateConfigs, normalizeCommandTemplateConfig, substituteCommandTemplateToken, } from "./command-templates.js";
 import { getTelegramVoiceTranscriptionProviders } from "./voice.js";
+import { downloadTelegramMessageFiles } from "./media.js";
+let companionVoiceRuntime;
+/** @internal The bridge supplies its existing download and configured STT pipeline. */
+export function bindTelegramVoiceInputRuntime(runtime) {
+    companionVoiceRuntime = runtime;
+}
+/** Transcribe an admitted forum voice/audio message without giving its agent file tools. */
+export async function transcribeTelegramVoiceMessage(message, cwd) {
+    const runtime = companionVoiceRuntime;
+    const audio = message.voice ?? message.audio;
+    if (!runtime || message.chat?.type !== "supergroup" || message.chat.id !== runtime.getAllowedChatId() ||
+        !message.from || message.from.is_bot || !audio) {
+        throw new Error("Voice input is unavailable for this message.");
+    }
+    const files = await downloadTelegramMessageFiles([{ message_id: message.message_id,
+            voice: message.voice, audio: message.audio }], runtime);
+    const result = await processTelegramInboundHandlers({ files, rawText: "", handlers: runtime.getHandlers(),
+        cwd, execCommand: runtime.execCommand });
+    const text = result.handlerOutputs.join("\n").trim();
+    if (!text)
+        throw new Error("Voice transcription returned no text.");
+    return text;
+}
 const DEFAULT_INBOUND_HANDLER_TIMEOUT_MS = 120_000;
 const INBOUND_HANDLER_REGISTRY_KEY = "__piTelegramInboundHandlers__";
 const MAX_INBOUND_HANDLER_OUTPUT_LENGTH = 24_000;

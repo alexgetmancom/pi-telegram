@@ -6,6 +6,7 @@
 
 export {
   registerTelegramInboundHandler,
+  transcribeTelegramVoiceMessage,
   type TelegramInboundHandlerFile,
   type TelegramInboundHandlerOutput,
   type TelegramInboundProgrammaticHandler,

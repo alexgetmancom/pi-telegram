@@ -2,9 +2,11 @@
 
 The forum has two independent native Pi sessions, served by one process and one Telegram poller. AI keeps the ordinary bridge and its shared controls. Cinema (topic 3) has its own history, prompt and model, with only the bounded `botflix` tool. Both Alex and Maru share each topic's conversation; bot messages are ignored. General remains silent. The old Telegram BotFlix runs independently.
 
-Cinema accepts text requests and `/start`, `/new`, `/compact`, `/stop`, `/model`; `/model provider/model` changes only Cinema's model. Voice, attachments and the ordinary inline settings menu remain in AI. Cinema has no shell, filesystem tools, browser authentication, arbitrary local torrent files, poster file writes or file deletion. Download URLs are limited to the configured tracker domains. Removing a torrent preserves its files. BotFlix's service credentials remain outside model context.
+Cinema accepts text and voice/audio requests, and `/start`, `/new`, `/compact`, `/stop`, `/model`; `/model provider/model` changes only Cinema's model. The bridge downloads voice and runs its existing configured STT pipeline before sending only text to Cinema. Other attachments and the ordinary inline settings menu remain in AI. Cinema has no shell, filesystem tools, browser authentication, arbitrary local torrent files, poster file writes or file deletion. Download URLs are limited to the configured tracker domains. Removing a torrent preserves its files. BotFlix's service credentials remain outside model context.
 
 The trusted host registers Cinema's exact forum destination with `registerTelegramDeliveryTarget` from the delivery API and consumes its human text updates through the public update-handler API. It neither starts another poller nor grants a model a destination-registration tool. Disposing the host revokes that delivery target.
+
+Before every Cinema model request, one trusted Pi context hook re-reads `alex.md`, `maru.md` and `watchlist.md` from the private family directory. These preferences are context data, not agent filesystem access. Profile edits are visible on the next turn; writes stay with AI and the daily reflection.
 
 ## Install on the host
 

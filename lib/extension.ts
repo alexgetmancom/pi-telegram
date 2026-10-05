@@ -789,6 +789,12 @@ export default function (pi: Pi.ExtensionAPI) {
       getActiveTurnTarget: activeTurnRuntime.getTarget,
       getActiveGuestQueryId: activeTurnRuntime.getGuestQueryId,
     });
+  Inbound.bindTelegramVoiceInputRuntime({
+    downloadFile: downloadTelegramBridgeFile,
+    getHandlers: configStore.getInboundHandlers,
+    execCommand: CommandTemplates.execCommandTemplate,
+    getAllowedChatId() { return configStore.get().forumTarget?.chatId; },
+  });
   const deliveryGenerationSeed =
     Delivery.createTelegramDeliveryGenerationSeed(telegramInstanceId);
   const deliveryLifecycleRuntime =

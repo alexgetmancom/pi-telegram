@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { Type } from "@sinclair/typebox";
 import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, SessionManager } from "@earendil-works/pi-coding-agent";
 import { registerTelegramUpdateHandler } from "../dist/api/updates.js";
+import { transcribeTelegramVoiceMessage } from "../dist/api/inbound.js";
 import { registerTelegramDeliveryTarget, sendTelegramView, sendTelegramChatAction } from "../dist/api/delivery.js";
 
 const executeFile = promisify(execFile);
@@ -130,10 +131,18 @@ export async function createCinemaRuntime(root, agentDir, sessionDir) {
     const services = await createAgentSessionServices({ cwd, agentDir, resourceLoaderOptions: {
       noExtensions: true, noSkills: true, noContextFiles: true, noPromptTemplates: true, noThemes: true,
       systemPrompt: readFileSync(join(root, "agent/CINEMA.md"), "utf8"),
+      extensionFactories: [pi => {
+        pi.on("before_agent_start", event => ({ systemPrompt: event.systemPrompt + "\n<family_preferences>\n" +
+          ["alex.md", "maru.md", "watchlist.md"].map(name =>
+            `${name}:\n${readFileSync(join(homedir(), ".local/share/family", name), "utf8")}`).join("\n\n") +
+          "\n</family_preferences>" }));
+      }],
     } });
     const result = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent,
       tools: ["botflix"], customTools: [botflixTool] });
-    if (result.session.getActiveToolNames().join() !== "botflix" || result.extensionsResult.extensions.length) throw new Error("Cinema tool isolation failed");
+    if (result.session.getActiveToolNames().join() !== "botflix" || result.extensionsResult.extensions.length !== 1 || result.extensionsResult.errors.length) throw new Error("Cinema tool isolation failed");
+    await result.session.bindExtensions({ mode: "rpc" });
+    if (result.session.getActiveToolNames().join() !== "botflix") throw new Error("Cinema tool isolation changed after binding");
     const file = sessionManager.getSessionFile();
     if (file && !existsSync(file)) {
       writeFileSync(file, [sessionManager.getHeader(), ...sessionManager.getEntries()].map(entry => JSON.stringify(entry)).join("\n") + "\n", { flag: "wx", mode: 0o600 });
@@ -175,7 +184,10 @@ export function connectCinema(runtime, log) {
       if (acceptedGeneration !== generation) return;
       const typing = setInterval(() => { sendTelegramChatAction("typing", { scope }).catch(() => {}); }, 4000);
       try {
-        if (!message.text) { await send("В теме «Кино» пока отправляй текстовый запрос. Голосовые и файлы доступны в теме AI."); return; }
+        const text = message.text ?? (message.voice || message.audio
+          ? await transcribeTelegramVoiceMessage(message, runtime.services.cwd) : undefined);
+        if (acceptedGeneration !== generation) return;
+        if (!text) { await send("Отправь текст или голосовое. Остальные файлы пока доступны в теме AI."); return; }
         if (command) {
           switch (command[1].toLowerCase()) {
             case "new": await runtime.newSession(); await send("Начата новая кино-сессия."); return;
@@ -194,7 +206,7 @@ export function connectCinema(runtime, log) {
           }
         }
         log("cinema_turn_started", { sessionId: runtime.session.sessionId, user: message.from.id, topic: cinemaTarget.threadId });
-        await runtime.session.prompt(`user=${message.from.id} name=${JSON.stringify(message.from.first_name ?? "")}\n${message.text}`);
+        await runtime.session.prompt(`user=${message.from.id} name=${JSON.stringify(message.from.first_name ?? "")}\n${text}`);
         if (acceptedGeneration !== generation) return;
         const last = runtime.session.messages.findLast(m => m.role === "assistant");
         if (last?.errorMessage || last?.stopReason === "error") throw new Error("Cinema model request failed");

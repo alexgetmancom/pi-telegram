@@ -189,8 +189,9 @@ test("Inbound bus projection owns target authority and local labels", () => {
   );
 });
 
-test("Routing runtime forwards authorized text messages into prompt queueing", async () => {
+test("Routing runtime forwards authorized text and preserves slash-menu targets", async () => {
   const events: string[] = [];
+  const menuTargets: unknown[] = [];
   const model: TestModel = { provider: "test", id: "model" };
   const bridgeRuntime = Runtime.createTelegramBridgeRuntime();
   const activeTurnRuntime = Queue.createTelegramActiveTurnStore();
@@ -235,7 +236,8 @@ test("Routing runtime forwards authorized text messages into prompt queueing", a
     openModelMenu: async () => {
       events.push("model-menu");
     },
-    openThinkingMenu: async () => {
+    openThinkingMenu: async (chatId, messageId, _ctx, threadId) => {
+      menuTargets.push({ command: "thinking", chatId, messageId, threadId });
       events.push("thinking-menu");
     },
   };
@@ -268,7 +270,12 @@ test("Routing runtime forwards authorized text messages into prompt queueing", a
     currentModelRuntime,
     modelSwitchController,
     menuActions,
-    openQueueMenu: async () => undefined,
+    openQueueMenu: async (chatId, messageId, _ctx, threadId) => {
+      menuTargets.push({ command: "queue", chatId, messageId, threadId });
+    },
+    openSettingsMenu: async (chatId, messageId, _ctx, threadId) => {
+      menuTargets.push({ command: "settings", chatId, messageId, threadId });
+    },
     queueMenuCallbackHandler: async () => false,
     inboundHandlerRuntime: {
       process: async (files, rawText) => ({
@@ -452,6 +459,17 @@ test("Routing runtime forwards authorized text messages into prompt queueing", a
       false,
     );
   }
+  menuTargets.length = 0;
+  for (const command of ["settings", "thinking", "queue"]) {
+    await routeRuntime.handleUpdate({ message: {
+      message_id: 81, chat: { id: -1007, type: "supergroup" },
+      from: { id: 7, is_bot: false }, message_thread_id: 16, text: `/${command}`,
+    } }, { cwd: "/repo" });
+  }
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(menuTargets, ["settings", "thinking", "queue"].map(command => ({
+    command, chatId: -1007, messageId: 81, threadId: 16,
+  })));
 });
 
 test("Routing executes bound generated-button actions before queue admission", async () => {

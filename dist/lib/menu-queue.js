@@ -295,14 +295,13 @@ async function handleTelegramQueueMenuSkipSet(callbackQueryId, replyChatId, repl
     await deps.answerCallbackQuery(callbackQueryId);
 }
 export function createTelegramQueueMenuRuntime(deps) {
-    const sendQueueMenuMessage = createQueueMenuSendMessageAdapter(deps.sendInteractiveMessage);
     const editQueueMenuMessage = createQueueMenuEditMessageAdapter(deps.editInteractiveMessage);
     return {
         openQueueMenu: createOpenQueueMenu({
             getQueuedItems: deps.telegramQueueStore.getQueuedItems,
             getModelMenuState: deps.getModelMenuState,
             storeModelMenuState: deps.storeModelMenuState,
-            sendInteractiveMessage: sendQueueMenuMessage,
+            sendInteractiveMessage: deps.sendInteractiveMessage,
         }),
         handleCallbackQuery: createQueueMenuCallbackHandler({
             telegramQueueStore: deps.telegramQueueStore,
@@ -317,11 +316,13 @@ export function createTelegramQueueMenuRuntime(deps) {
     };
 }
 function createOpenQueueMenu(deps) {
-    return async (chatId, replyToMessageId, ctx) => {
-        const state = await deps.getModelMenuState(chatId, ctx);
+    return async (chatId, _replyToMessageId, ctx, threadId) => {
+        const state = await deps.getModelMenuState(chatId, ctx, threadId);
         const menuItems = toTelegramQueueMenuItems(deps.getQueuedItems());
         const text = getTelegramQueueMenuListText(menuItems);
-        const messageId = await deps.sendInteractiveMessage(chatId, replyToMessageId, text, buildTelegramQueueMenuReplyMarkup(menuItems));
+        const messageId = await deps.sendInteractiveMessage(chatId, text, "html", buildTelegramQueueMenuReplyMarkup(menuItems), state.threadId !== undefined
+            ? { target: { chatId: state.chatId, threadId: state.threadId } }
+            : undefined);
         if (messageId === undefined)
             return;
         state.messageId = messageId;
@@ -464,11 +465,6 @@ function setQueuedTelegramPromptSkipped(chatId, replyToMessageId, skipped, ctx, 
         return false;
     deps.queueMutationRuntime.applyReactionByMessageId(replyToMessageId, getQueueMenuReactionDisposition(item, item.queueLane === "priority", skipped), ctx);
     return true;
-}
-function createQueueMenuSendMessageAdapter(sendInteractiveMessage) {
-    return (chatId, _replyToMessageId, text, replyMarkup) => {
-        return sendInteractiveMessage(chatId, text, "html", replyMarkup);
-    };
 }
 function createQueueMenuEditMessageAdapter(editInteractiveMessage) {
     return (chatId, messageId, text, replyMarkup) => {

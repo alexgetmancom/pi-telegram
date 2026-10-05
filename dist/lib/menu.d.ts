@@ -103,7 +103,7 @@ export interface TelegramMenuActionRuntime<TContext, TModel extends MenuModel = 
     updateStatusMessage: (state: TelegramModelMenuState<TModel>, ctx: TContext) => Promise<void>;
     sendStatusMessage: (chatId: number, replyToMessageId: number, ctx: TContext, threadId?: number) => Promise<void>;
     openModelMenu: (chatId: number, replyToMessageId: number, ctx: TContext, threadId?: number) => Promise<void>;
-    openThinkingMenu: (chatId: number, replyToMessageId: number, ctx: TContext) => Promise<void>;
+    openThinkingMenu: (chatId: number, replyToMessageId: number, ctx: TContext, threadId?: number) => Promise<void>;
 }
 export type TelegramMenuCallbackAction = {
     kind: "ignore";

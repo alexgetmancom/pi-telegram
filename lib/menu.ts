@@ -305,6 +305,7 @@ export interface TelegramMenuActionRuntime<
     chatId: number,
     replyToMessageId: number,
     ctx: TContext,
+    threadId?: number,
   ) => Promise<void>;
 }
 
@@ -886,9 +887,9 @@ export function createTelegramMenuActionRuntime<
           sendTelegramModelMenuMessage(state, activeModel, deps),
         storeModelMenuState: deps.storeModelMenuState,
       }),
-    openThinkingMenu: (chatId, _replyToMessageId, ctx) =>
+    openThinkingMenu: (chatId, _replyToMessageId, ctx, threadId) =>
       openTelegramThinkingMenu({
-        getModelMenuState: () => deps.getModelMenuState(chatId, ctx),
+        getModelMenuState: () => deps.getModelMenuState(chatId, ctx, threadId),
         getActiveModel: () => deps.getActiveModel(ctx),
         getThinkingLevel: deps.getThinkingLevel,
         storeModelMenuState: deps.storeModelMenuState,

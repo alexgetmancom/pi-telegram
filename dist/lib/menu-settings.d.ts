@@ -51,7 +51,7 @@ export interface TelegramSettingsMenuCallbackDeps extends TelegramSettingsMutati
     sectionRegistry?: TelegramSectionRegistry;
 }
 export interface TelegramSettingsMenuRuntime<TContext> {
-    openSettingsMenu: (chatId: number, replyToMessageId: number, ctx: TContext) => Promise<void>;
+    openSettingsMenu: (chatId: number, replyToMessageId: number, ctx: TContext, threadId?: number) => Promise<void>;
     handleCallbackQuery: (query: {
         id: string;
         data?: string;
@@ -74,7 +74,12 @@ export interface TelegramSettingsMenuRuntimeDeps<TContext, TModel extends MenuMo
     getStoredModelMenuState: (messageId: number | undefined, chatId?: number) => TelegramModelMenuState<TModel> | undefined;
     storeModelMenuState: (state: TelegramModelMenuState<TModel>) => void;
     editInteractiveMessage: (chatId: number, messageId: number, text: string, mode: "markdown" | "html" | "plain", replyMarkup: TelegramSettingsMenuReplyMarkup) => Promise<void>;
-    sendInteractiveMessage: (chatId: number, text: string, mode: "markdown" | "html" | "plain", replyMarkup: TelegramSettingsMenuReplyMarkup) => Promise<number | undefined>;
+    sendInteractiveMessage: (chatId: number, text: string, mode: "markdown" | "html" | "plain", replyMarkup: TelegramSettingsMenuReplyMarkup, options?: {
+        target?: {
+            chatId: number;
+            threadId?: number;
+        };
+    }) => Promise<number | undefined>;
     answerCallbackQuery: (callbackQueryId: string, text?: string) => Promise<void>;
 }
 export declare function buildTelegramSettingsMenuText(): string;

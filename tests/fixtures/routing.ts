@@ -16,7 +16,7 @@ export interface TestModel extends Model.MenuModel { provider: "test"; id: "mode
 export interface TestUser extends Updates.TelegramUser {}
 export interface TestMessage extends Routing.TelegramRoutedMessage {
   date?: number;
-  chat: { id: number; type: "private" };
+  chat: { id: number; type: "private" | "supergroup" };
   from?: TestUser;
   message_id: number;
   message_thread_id?: number;

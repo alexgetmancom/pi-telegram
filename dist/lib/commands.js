@@ -83,6 +83,7 @@ export const TELEGRAM_COMMAND_EMOJI = {
     status: "📊",
     model: "🤖",
     thinking: "🧠",
+    settings: "⚙️",
     compact: "🗜",
     queue: "🔢",
     thread: "🧵",
@@ -160,6 +161,11 @@ const TELEGRAM_BUILTIN_BOT_COMMANDS = [
         command: "stop",
         description: formatTelegramBotCommandDescription("stop", "Abort Pi & Clear queue"),
     },
+    { command: "status", description: formatTelegramBotCommandDescription("status", "Show current status") },
+    { command: "model", description: formatTelegramBotCommandDescription("model", "Choose a model") },
+    { command: "thinking", description: formatTelegramBotCommandDescription("thinking", "Choose thinking level") },
+    { command: "queue", description: formatTelegramBotCommandDescription("queue", "Show queued prompts") },
+    { command: "settings", description: formatTelegramBotCommandDescription("settings", "Open settings") },
 ];
 export const TELEGRAM_BOT_COMMANDS = TELEGRAM_BUILTIN_BOT_COMMANDS;
 function getVisibleTelegramExtensionBotCommands() {

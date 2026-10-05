@@ -644,6 +644,7 @@ interface TelegramQueueMenuRuntime<Context> {
     chatId: number,
     replyToMessageId: number,
     ctx: Context,
+    threadId?: number,
   ) => Promise<void>;
   handleCallbackQuery: (
     query: TelegramQueueMenuCallbackQuery,
@@ -661,6 +662,7 @@ export function createTelegramQueueMenuRuntime<
     text: string,
     mode: "html",
     replyMarkup: TelegramQueueMenuReplyMarkup,
+    options?: { target?: { chatId: number; threadId?: number } },
   ) => Promise<number | undefined>;
   editInteractiveMessage: (
     chatId: number,
@@ -676,6 +678,7 @@ export function createTelegramQueueMenuRuntime<
   getModelMenuState: (
     chatId: number,
     ctx: Context,
+    threadId?: number,
   ) => Promise<TelegramModelMenuState<TModel>>;
   getStoredModelMenuState: (
     messageId: number | undefined,
@@ -689,9 +692,6 @@ export function createTelegramQueueMenuRuntime<
   updateStatus: (ctx: Context) => void;
   dismissGuestPlaceholder?: (inlineMessageId: string) => Promise<void>;
 }): TelegramQueueMenuRuntime<Context> {
-  const sendQueueMenuMessage = createQueueMenuSendMessageAdapter(
-    deps.sendInteractiveMessage,
-  );
   const editQueueMenuMessage = createQueueMenuEditMessageAdapter(
     deps.editInteractiveMessage,
   );
@@ -700,7 +700,7 @@ export function createTelegramQueueMenuRuntime<
       getQueuedItems: deps.telegramQueueStore.getQueuedItems,
       getModelMenuState: deps.getModelMenuState,
       storeModelMenuState: deps.storeModelMenuState,
-      sendInteractiveMessage: sendQueueMenuMessage,
+      sendInteractiveMessage: deps.sendInteractiveMessage,
     }),
     handleCallbackQuery: createQueueMenuCallbackHandler<Context, TModel>({
       telegramQueueStore: deps.telegramQueueStore,
@@ -723,28 +723,34 @@ function createOpenQueueMenu<
   getModelMenuState: (
     chatId: number,
     ctx: Context,
+    threadId?: number,
   ) => Promise<TelegramModelMenuState<TModel>>;
   storeModelMenuState: (state: TelegramModelMenuState<TModel>) => void;
   sendInteractiveMessage: (
     chatId: number,
-    replyToMessageId: number,
     text: string,
+    mode: "html",
     replyMarkup: TelegramQueueMenuReplyMarkup,
+    options?: { target?: { chatId: number; threadId?: number } },
   ) => Promise<number | undefined>;
 }) {
   return async (
     chatId: number,
-    replyToMessageId: number,
+    _replyToMessageId: number,
     ctx: Context,
+    threadId?: number,
   ): Promise<void> => {
-    const state = await deps.getModelMenuState(chatId, ctx);
+    const state = await deps.getModelMenuState(chatId, ctx, threadId);
     const menuItems = toTelegramQueueMenuItems(deps.getQueuedItems());
     const text = getTelegramQueueMenuListText(menuItems);
     const messageId = await deps.sendInteractiveMessage(
       chatId,
-      replyToMessageId,
       text,
+      "html",
       buildTelegramQueueMenuReplyMarkup(menuItems),
+      state.threadId !== undefined
+        ? { target: { chatId: state.chatId, threadId: state.threadId } }
+        : undefined,
     );
     if (messageId === undefined) return;
     state.messageId = messageId;
@@ -1014,24 +1020,6 @@ function setQueuedTelegramPromptSkipped<Context>(
     ctx,
   );
   return true;
-}
-
-function createQueueMenuSendMessageAdapter(
-  sendInteractiveMessage: (
-    chatId: number,
-    text: string,
-    mode: "html",
-    replyMarkup: TelegramQueueMenuReplyMarkup,
-  ) => Promise<number | undefined>,
-) {
-  return (
-    chatId: number,
-    _replyToMessageId: number,
-    text: string,
-    replyMarkup: TelegramQueueMenuReplyMarkup,
-  ): Promise<number | undefined> => {
-    return sendInteractiveMessage(chatId, text, "html", replyMarkup);
-  };
 }
 
 function createQueueMenuEditMessageAdapter(

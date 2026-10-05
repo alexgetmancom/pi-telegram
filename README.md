@@ -185,7 +185,7 @@ Use these in the bot DM.
 | `/abort` | Abort the active run while preserving the queue |
 | `/stop` | Abort the active run and clear waiting Telegram turns |
 
-Hidden compatibility shortcuts: `/help`, `/status`, `/model`, `/thinking`, `/queue`, and `/settings` jump into the same menu system.
+Command suggestions include `/status`, `/model`, `/thinking`, `/queue`, and `/settings` for opening sections directly. `/help` opens the same main menu as `/start`.
 
 ## Pi Commands
 

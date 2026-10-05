@@ -51,6 +51,7 @@ export declare const TELEGRAM_COMMAND_EMOJI: {
     readonly status: "📊";
     readonly model: "🤖";
     readonly thinking: "🧠";
+    readonly settings: "⚙️";
     readonly compact: "🗜";
     readonly queue: "🔢";
     readonly thread: "🧵";

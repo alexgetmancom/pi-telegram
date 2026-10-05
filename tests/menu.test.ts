@@ -2569,6 +2569,71 @@ test("Settings menu marks voice mode selection with model-style dot", () => {
   );
 });
 
+test("Slash menus preserve the originating forum topic through state and delivery", async () => {
+  const model = createMenuModel("openai", "gpt-5", true);
+  const stored: TelegramModelMenuState[] = [];
+  const sent: Array<{ chatId: number; target: unknown }> = [];
+  const ports = {
+    getModelMenuState: async (chatId: number, _ctx: string, threadId?: number) =>
+      createMenuState(0, { chatId, threadId }),
+    getStoredModelMenuState: () => undefined,
+    storeModelMenuState: (state: TelegramModelMenuState) => { stored.push(state); },
+    sendInteractiveMessage: async (
+      chatId: number,
+      _text: string,
+      _mode: "markdown" | "html" | "plain",
+      _markup: TelegramInlineKeyboardMarkup,
+      options?: { target?: { chatId: number; threadId?: number } },
+    ) => { sent.push({ chatId, target: options?.target }); return 99; },
+    editInteractiveMessage: async () => {},
+    answerCallbackQuery: async () => {},
+  };
+  const settings = createTelegramSettingsMenuRuntime({
+    ...ports,
+    areDraftPreviewsEnabled: () => true,
+    getAssistantRenderingMode: () => "rich",
+    getActivityVerbosity: () => "quiet",
+    getTimeInjectionMode: () => "hidden",
+    getVoiceReplyMode: () => "manual",
+    isVoiceReplyModeConfigured: () => false,
+    isAutomaticThreadCleanupEnabled: () => false,
+    setDraftPreviewsEnabled: async () => {},
+    setAssistantRenderingMode: async () => {},
+    setActivityVerbosity: async () => {},
+    setVoiceReplyMode: async () => {},
+    setTimeInjectionMode: async () => {},
+    setAutomaticThreadCleanupEnabled: async () => {},
+  });
+  const menus = createTelegramMenuActionRuntime({
+    ...ports,
+    getActiveModel: () => model,
+    getThinkingLevel: () => "medium",
+    getQueueItemCount: () => 0,
+    buildStatusHtml: () => "status",
+    isIdle: () => true,
+    canOfferInFlightModelSwitch: () => false,
+    sendTextReply: async () => {},
+  });
+  const queue = createTelegramQueueMenuRuntime({
+    ...ports,
+    telegramQueueStore: { getQueuedItems: () => [], setQueuedItems: () => {}, hasQueuedItems: () => false },
+    queueMutationRuntime: { append: () => {}, reorder: () => {}, clear: () => 0, removeByMessageIds: () => 0, applyReactionByMessageId: () => false },
+    updateStatusMessage: async () => {},
+    updateStatus: () => {},
+  });
+  for (const target of [{ chatId: -1007, threadId: 16 }, { chatId: 7, threadId: undefined }]) {
+    for (const open of [settings.openSettingsMenu, menus.openThinkingMenu, queue.openQueueMenu]) {
+      await open(target.chatId, 81, "ctx", target.threadId);
+      assert.equal(stored.at(-1)?.threadId, target.threadId);
+      assert.deepEqual(sent.at(-1), {
+        chatId: target.chatId,
+        target: target.threadId === undefined ? undefined : target,
+      });
+    }
+  }
+  assert.equal(sent.length, 6);
+});
+
 test("Settings menu rehydrates expired state before persisting and rendering voice mode", async () => {
   let mode: "manual" | "mirror" | "always" | undefined;
   let configured = false;

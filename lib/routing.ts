@@ -715,11 +715,13 @@ export interface TelegramInboundRouteRuntimeDeps<
     chatId: number,
     replyToMessageId: number,
     ctx: TContext,
+    threadId?: number,
   ) => Promise<void>;
   openSettingsMenu?: (
     chatId: number,
     replyToMessageId: number,
     ctx: TContext,
+    threadId?: number,
   ) => Promise<void>;
   settingsMenuCallbackHandler?: (
     query: TCallbackQuery,
@@ -3693,12 +3695,12 @@ export function createTelegramInboundRouteRuntime<
     showStatus: deps.menuActions.sendStatusMessage,
     openModelMenu: deps.menuActions.openModelMenu,
     openThinkingMenu: (message, ctx) => {
-      const chatId = (message as { chat: { id: number } }).chat.id;
-      return deps.menuActions.openThinkingMenu(chatId, message.message_id, ctx);
+      const target = Commands.getTelegramCommandMessageTarget(message);
+      return deps.menuActions.openThinkingMenu(target.chatId, target.replyToMessageId, ctx, target.threadId);
     },
     openQueueMenu: (message, ctx) => {
-      const chatId = (message as { chat: { id: number } }).chat.id;
-      return deps.openQueueMenu(chatId, message.message_id, ctx);
+      const target = Commands.getTelegramCommandMessageTarget(message);
+      return deps.openQueueMenu(target.chatId, target.replyToMessageId, ctx, target.threadId);
     },
     openSettingsMenu: deps.openSettingsMenu,
     getAllowedUserId: deps.configStore.getAllowedUserId,

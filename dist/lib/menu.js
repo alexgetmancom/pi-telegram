@@ -310,8 +310,8 @@ export function createTelegramMenuActionRuntime(deps) {
             sendModelMenu: (state, activeModel) => sendTelegramModelMenuMessage(state, activeModel, deps),
             storeModelMenuState: deps.storeModelMenuState,
         }),
-        openThinkingMenu: (chatId, _replyToMessageId, ctx) => openTelegramThinkingMenu({
-            getModelMenuState: () => deps.getModelMenuState(chatId, ctx),
+        openThinkingMenu: (chatId, _replyToMessageId, ctx, threadId) => openTelegramThinkingMenu({
+            getModelMenuState: () => deps.getModelMenuState(chatId, ctx, threadId),
             getActiveModel: () => deps.getActiveModel(ctx),
             getThinkingLevel: deps.getThinkingLevel,
             storeModelMenuState: deps.storeModelMenuState,

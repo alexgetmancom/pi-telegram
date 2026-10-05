@@ -155,8 +155,8 @@ export interface TelegramInboundRouteRuntimeDeps<TMessage extends TelegramRouted
     modelSwitchController: Model.TelegramModelSwitchController<TContext, Model.ScopedTelegramModel<TModel>>;
     menuActions: Menu.TelegramMenuActionRuntime<TContext, TModel>;
     updateSettingsMenuMessage?: (state: Menu.TelegramModelMenuState<TModel>, ctx: TContext) => Promise<void>;
-    openQueueMenu: (chatId: number, replyToMessageId: number, ctx: TContext) => Promise<void>;
-    openSettingsMenu?: (chatId: number, replyToMessageId: number, ctx: TContext) => Promise<void>;
+    openQueueMenu: (chatId: number, replyToMessageId: number, ctx: TContext, threadId?: number) => Promise<void>;
+    openSettingsMenu?: (chatId: number, replyToMessageId: number, ctx: TContext, threadId?: number) => Promise<void>;
     settingsMenuCallbackHandler?: (query: TCallbackQuery, ctx: TContext) => Promise<boolean>;
     queueMenuCallbackHandler: (query: TCallbackQuery, ctx: TContext) => Promise<boolean>;
     buttonActionStore?: OutboundHandlers.TelegramButtonActionStore;

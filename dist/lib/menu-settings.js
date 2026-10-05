@@ -522,10 +522,10 @@ export async function handleTelegramSettingsMenuCallbackAction(callbackQueryId, 
 }
 export function createTelegramSettingsMenuRuntime(deps, sectionRegistry) {
     return {
-        openSettingsMenu: async (chatId, _replyToMessageId, ctx) => {
+        openSettingsMenu: async (chatId, _replyToMessageId, ctx, threadId) => {
             await deps.reloadConfig?.();
             return openTelegramSettingsMenu({
-                getModelMenuState: () => deps.getModelMenuState(chatId, ctx),
+                getModelMenuState: () => deps.getModelMenuState(chatId, ctx, threadId),
                 areDraftPreviewsEnabled: deps.areDraftPreviewsEnabled,
                 getAssistantRenderingMode: deps.getAssistantRenderingMode,
                 getActivityVerbosity: deps.getActivityVerbosity,
@@ -535,7 +535,9 @@ export function createTelegramSettingsMenuRuntime(deps, sectionRegistry) {
                 isAutomaticThreadCleanupEnabled: deps.isAutomaticThreadCleanupEnabled,
                 getThreadDisplayMode: deps.getThreadDisplayMode,
                 isThreadDisplayCustom: deps.isThreadDisplayCustom,
-                sendSettingsMenu: (state, text, replyMarkup) => deps.sendInteractiveMessage(state.chatId, text, "html", replyMarkup),
+                sendSettingsMenu: (state, text, replyMarkup) => deps.sendInteractiveMessage(state.chatId, text, "html", replyMarkup, state.threadId !== undefined
+                    ? { target: { chatId: state.chatId, threadId: state.threadId } }
+                    : undefined),
                 storeModelMenuState: deps.storeModelMenuState,
             }, sectionRegistry);
         },

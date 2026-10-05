@@ -83,6 +83,7 @@ export interface TelegramSettingsMenuRuntime<TContext> {
     chatId: number,
     replyToMessageId: number,
     ctx: TContext,
+    threadId?: number,
   ) => Promise<void>;
   handleCallbackQuery: (
     query: {
@@ -136,6 +137,7 @@ export interface TelegramSettingsMenuRuntimeDeps<
     text: string,
     mode: "markdown" | "html" | "plain",
     replyMarkup: TelegramSettingsMenuReplyMarkup,
+    options?: { target?: { chatId: number; threadId?: number } },
   ) => Promise<number | undefined>;
   answerCallbackQuery: (
     callbackQueryId: string,
@@ -876,11 +878,11 @@ export function createTelegramSettingsMenuRuntime<
   sectionRegistry?: TelegramSectionRegistry,
 ): TelegramSettingsMenuRuntime<TContext> {
   return {
-    openSettingsMenu: async (chatId, _replyToMessageId, ctx) => {
+    openSettingsMenu: async (chatId, _replyToMessageId, ctx, threadId) => {
       await deps.reloadConfig?.();
       return openTelegramSettingsMenu(
         {
-          getModelMenuState: () => deps.getModelMenuState(chatId, ctx),
+          getModelMenuState: () => deps.getModelMenuState(chatId, ctx, threadId),
           areDraftPreviewsEnabled: deps.areDraftPreviewsEnabled,
           getAssistantRenderingMode: deps.getAssistantRenderingMode,
           getActivityVerbosity: deps.getActivityVerbosity,
@@ -896,6 +898,9 @@ export function createTelegramSettingsMenuRuntime<
               text,
               "html",
               replyMarkup,
+              state.threadId !== undefined
+                ? { target: { chatId: state.chatId, threadId: state.threadId } }
+                : undefined,
             ),
           storeModelMenuState: deps.storeModelMenuState,
         },

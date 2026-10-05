@@ -2,7 +2,7 @@
 
 /** Long-lived Pi SDK host; the installed pi-telegram extension owns Telegram. */
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -40,6 +40,12 @@ const runtime = await createAgentSessionRuntime(async ({ cwd, agentDir, sessionM
 
 let unsubscribe;
 async function bindSession(session) {
+  const manager = session.sessionManager;
+  const file = manager.getSessionFile();
+  if (file && !existsSync(file)) {
+    writeFileSync(file, [manager.getHeader(), ...manager.getEntries()].map(entry => JSON.stringify(entry)).join("\n") + "\n", { flag: "wx", mode: 0o600 });
+    manager.setSessionFile(file);
+  }
   unsubscribe?.();
   await session.bindExtensions({
     mode: "rpc",

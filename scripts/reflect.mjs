@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createAgentSession, DefaultResourceLoader, getAgentDir, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 
-const names = ["alex.md", "maru.md", "watchlist.md", "network-issues.md"];
+const names = ["alex.md", "maru.md", "watchlist.md"];
 
 export function reflectionWindow(date, now = new Date()) {
   date ??= new Date(now.getTime() + 3 * 3600000 - 86400000).toISOString().slice(0, 10);
@@ -39,29 +39,18 @@ export async function collectTranscript(directory, window) {
       const timestamp = Date.parse(entry.timestamp);
       const message = entry.message;
       if (entry.type !== "message" || timestamp < window.start || timestamp >= window.end || !Number.isFinite(timestamp) ||
-          !["user", "assistant", "toolResult"].includes(message?.role)) continue;
+          !["user", "assistant"].includes(message?.role) ||
+          message.role === "assistant" && (message.errorMessage || message.stopReason && message.stopReason !== "stop" ||
+            Array.isArray(message.content) && message.content.some(block => block.type === "toolCall"))) continue;
       const content = typeof message.content === "string" ? message.content : (message.content ?? []).flatMap(block => {
         if (block.type === "text") return [block.text];
-        if (block.type === "toolCall") return [JSON.stringify({ tool: block.name, arguments: block.arguments })];
-        return []; // Images and internal thinking are not reflection evidence.
+        return []; // Only conversational text is family-memory evidence.
       }).join("\n");
-      if (content || message.errorMessage) messages.push({ source: `${name}#${entry.id}`, timestamp: entry.timestamp,
-        role: message.role, tool: message.toolName, isError: message.isError,
-        content: redact(content), error: message.errorMessage ? redact(message.errorMessage) : undefined });
+      if (content.trim()) messages.push({ source: `${name}#${entry.id}`, timestamp: entry.timestamp,
+        role: message.role, content: redact(content) });
     }
   }
   return messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-}
-
-export function condenseTranscript(transcript) {
-  return transcript.map(item => {
-    const limit = item.role === "user" ? Infinity : item.role === "assistant" ? 4000 : item.isError ? 6000 : 1200;
-    if (item.content.length <= limit) return item;
-    const symptoms = item.content.split("\n").filter(line => /error|fail|timeout|timed out|forbidden|HTTP.*[45]\d\d|TEXTDRAFT|недоступ|ошиб/i.test(line))
-      .slice(0, 20).map(line => line.slice(0, 300)).join("\n");
-    return { ...item, originalCharacters: item.content.length, condensed: true,
-      content: `${item.content.slice(0, limit / 2)}\n[OUTPUT CONDENSED: middle omitted; full evidence at source]\n${symptoms}\n${item.content.slice(-limit / 2)}` };
-  });
 }
 
 export async function saveReflection(directory, before, result, window) {
@@ -110,10 +99,9 @@ async function main() {
   try {
     if (session.model?.id !== "gpt-6-luna" || session.thinkingLevel !== "max" || session.getActiveToolNames().length) throw new Error("Reflection model/thinking/tool configuration mismatch");
     const started = Date.now();
-    const evidence = condenseTranscript(transcript);
-    const prompt = `Analyze this entire day's evidence in ONE pass and return ONLY {updates, report} JSON now. All user messages are complete; lengthy technical outputs are explicitly condensed, so do not assume omitted evidence. Existing memory is the current authoritative snapshot; old participants paths were already migrated to this family directory. Preserve facts and cite sources. updates contains only changed files with COMPLETE contents. report is concise Russian Markdown. No code fences.\n${JSON.stringify({ window, memory: before, evidence })}`;
-    console.log(JSON.stringify({ event: "reflection_started", ...counts, requests: 1, evidenceCharacters: JSON.stringify(evidence).length,
-      originalCharacters: JSON.stringify(transcript).length, model: session.model.id, thinking: session.thinkingLevel }));
+    const prompt = `Extract ONLY new explicitly confirmed family facts from this day's text conversation in one pass. Assistant replies provide context, never proof. Compare with current memory; do not duplicate facts or analyze technical work. Return ONLY {updates, report} JSON with complete contents for changed files. If nothing is new, updates is {} and report is "Новых семейных фактов нет.". No code fences.\n${JSON.stringify({ window, memory: before, conversation: transcript })}`;
+    console.log(JSON.stringify({ event: "reflection_started", ...counts, requests: 1, conversationCharacters: JSON.stringify(transcript).length,
+      model: session.model.id, thinking: session.thinkingLevel }));
     await session.prompt(prompt);
     const last = session.messages.findLast(message => message.role === "assistant");
     if (!last || last.errorMessage || ["error", "aborted", "length"].includes(last.stopReason)) throw new Error(`Reflection failed: ${redact(last?.errorMessage ?? last?.stopReason ?? "no response")}`);

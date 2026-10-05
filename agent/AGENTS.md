@@ -23,6 +23,8 @@ Alex (Алекс) and Maru (Мару, Маша) share this conversation. Telegra
 - Identify torrent changes by the returned exact hash. Repeating a download returns `existing: true`; removal keeps media unless `--delete-files` was explicitly requested. A full season requires its series URL, season and quality. Preserve `/downloads/movies` and `/downloads/shows/NAME/Season NN`.
 - Existing service configuration contains API credentials. Read only the needed fields; never print, return, commit or send secret values. The assistant's secrets are in `~/.config/pi-telegram/secrets.env`.
 - Pi Telegram runs under the user service `pi-telegram.service`. Read status with `systemctl --user status pi-telegram` and logs with `journalctl --user -u pi-telegram`. Runtime diagnostics are in `~/.pi/agent/tmp/pi-telegram/logs.jsonl`; native session history is in `~/.pi/agent/sessions/pi-telegram`.
+- Voice and audio inputs are transcribed automatically by the native inbound handler using the existing `agent-asr` Docker service. Treat the transcript in `[outputs]` as the participant's request, preserving its author and reply context. Reply with text; do not transcribe again when a transcript is already present.
+- To transcribe an audio file explicitly, run `node /home/alex/projects/home/pi-telegram/scripts/transcribe.mjs /absolute/path/to/audio`. The script resolves the ASR container address on each call; no external speech API key is required.
 
 ## Work on the machine
 

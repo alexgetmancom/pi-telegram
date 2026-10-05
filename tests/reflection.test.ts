@@ -6,7 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 const script = new URL("../scripts/reflect.mjs", import.meta.url);
-const { reflectionWindow, collectTranscript, redact, saveReflection } = await import(script.href);
+const { reflectionWindow, collectTranscript, redact, condenseTranscript, saveReflection } = await import(script.href);
 
 test("Reflection uses the complete previous Moscow calendar day and validates manual dates", () => {
   const day = reflectionWindow(undefined, new Date("2026-10-05T21:01:00Z"));
@@ -59,4 +59,19 @@ test("Reflection rejects unknown files and concurrent changes before writing any
     assert.match(await readFile(join(dir, "reflections/2026-10-05.md"), "utf8"), /gpt-6-luna · max/);
     assert.ok(!(await readdir(dir)).some(name => name.endsWith(".tmp")));
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+
+test("Reflection condenses bulky technical output without losing user messages, sources or failure details", () => {
+  const user = { source: "session#user", role: "user", content: "personal fact ".repeat(1000) };
+  const tool = { source: "session#tool", role: "toolResult", content: "start\n" + "irrelevant dump\n".repeat(10000) + "HTTP 451 Forbidden\n" + "dump\n".repeat(10000) + "end" };
+  const error = { source: "session#error", role: "toolResult", isError: true, content: "curl timed out", error: "request failed" };
+  const rows = condenseTranscript([user, tool, error]);
+  assert.deepEqual(rows[0], user);
+  assert.deepEqual(rows[2], error);
+  assert.equal(rows[1].source, tool.source);
+  assert.equal(rows[1].originalCharacters, tool.content.length);
+  assert.match(rows[1].content, /HTTP 451 Forbidden/);
+  assert.match(rows[1].content, /middle omitted/);
+  assert.ok(rows[1].content.length < 8000);
 });

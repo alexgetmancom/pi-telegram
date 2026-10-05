@@ -3917,6 +3917,7 @@ export function createTelegramInboundRouteRuntime(deps) {
     };
     const runtime = Updates.createTelegramPairedUpdateRuntime({
         getAllowedUserId: deps.configStore.getAllowedUserId,
+        getForumTarget: () => deps.configStore.get().forumTarget,
         getCurrentInstanceId: deps.getCurrentInstanceId,
         getMessageOwnership: deps.getMessageOwnership,
         getTargetOwnership: deps.getTargetOwnership,

@@ -631,6 +631,10 @@ export interface TelegramSessionActionAssemblyDeps {
     };
     getProfileName: () => string | undefined;
     ownsPersistence: () => boolean;
+    getForumTarget?: () => {
+        chatId: number;
+        threadId: number;
+    } | undefined;
     /**
      * Registered-follower port. A follower cannot persist leader-owned state, so
      * its Workspace Thread intent is published and claimed by the leader over

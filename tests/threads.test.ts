@@ -2224,6 +2224,22 @@ test("Classic session replacement intent persists without mutating Workspace bin
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
+test("Forum session replacement retains its topic after reopening durable state", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-forum-session-replacement-"));
+  const path = join(dir, "state.json");
+  const intent = { continuity: "forum-topic" as const, cwd: "/repo", profileName: "default",
+    sourceSessionId: "session-old", sourceUpdateId: 41, target: { chatId: -1007, threadId: 16 },
+    messageId: 99, createdAtMs: 1000, expiresAtMs: 31_000 };
+  try {
+    const store = createTelegramTopicTargetStore({ path, getNowMs: () => 1000 });
+    assert.equal(await store.commitSessionReplacementIntent(intent, () => true), true);
+    const reopened = createTelegramTopicTargetStore({ path, getNowMs: () => 2000 });
+    await reopened.load();
+    assert.deepEqual(reopened.getSessionReplacementIntent(), intent);
+    assert.deepEqual(reopened.listWorkspaceBindings(), []);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
 test("Session replacement intent re-keys the exact Workspace binding for a successor process", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-telegram-session-rekey-"));
   const path = join(dir, "state.json");

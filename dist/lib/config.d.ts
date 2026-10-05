@@ -40,6 +40,10 @@ export declare function resolveTelegramThreadDisplayMode(config: Pick<TelegramCo
 export declare function setTelegramThreadDisplayMode(store: TelegramConfigStore, mode: TelegramThreadDisplayMode, isCurrent: () => boolean): Promise<void>;
 export type TelegramAssistantRenderingMode = "rich" | "html";
 export type TelegramActivityVerbosity = "quiet" | "thinking" | "tools" | "verbose";
+export interface TelegramForumTarget {
+    chatId: number;
+    threadId: number;
+}
 export interface TelegramConfig {
     /** @deprecated persisted identity belongs in profiles.default; retained for effective/legacy views */
     botToken?: string;
@@ -49,6 +53,8 @@ export interface TelegramConfig {
     botId?: number;
     /** @deprecated persisted identity belongs in profiles.default; retained for effective/legacy views */
     allowedUserId?: number;
+    /** Effective profile view: all humans in this forum topic share the session. */
+    forumTarget?: TelegramForumTarget;
     /** Effective view; persisted under profiles.<name>. */
     threadDisplayMode?: TelegramThreadDisplayMode;
     inboundHandlers?: TelegramInboundHandlerConfig[];
@@ -91,6 +97,7 @@ export interface TelegramBotProfile {
     botUsername?: string;
     botId?: number;
     allowedUserId?: number;
+    forumTarget?: TelegramForumTarget;
     threadDisplayMode?: TelegramThreadDisplayMode;
 }
 export declare function isValidTelegramProfileName(name: string): boolean;

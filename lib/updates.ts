@@ -83,6 +83,7 @@ import {
   getTelegramAuthorizationState,
   type TelegramAuthorizationState,
   type TelegramUserPairingRuntimeDeps,
+  type TelegramForumTarget,
 } from "./config.ts";
 
 // --- Extraction ---
@@ -867,6 +868,7 @@ export function buildTelegramUpdateFlowAction<
 >(
   update: TUpdate,
   allowedUserId?: number,
+  forumTarget?: TelegramForumTarget,
 ): TelegramUpdateFlowAction<
   NonNullable<TUpdate["message_reaction"]>,
   NonNullable<TUpdate["callback_query"]>,
@@ -876,6 +878,29 @@ export function buildTelegramUpdateFlowAction<
   // Business chats are independent from bot chats even when chat/message IDs coincide.
   // Raw handlers may own that namespace; the default DM runtime has no deletion authority.
   if (update.deleted_business_messages !== undefined) return { kind: "ignore" };
+  if (forumTarget) {
+    const query = update.callback_query;
+    const message = query?.message ?? update.message ?? update.edited_message;
+    const sender = query?.from ?? message?.from;
+    if (update.message_reaction) {
+      return update.message_reaction.chat.id === forumTarget.chatId
+        ? { kind: "reaction", reactionUpdate: update.message_reaction }
+        : { kind: "ignore" };
+    }
+    if (!message || message.chat.type !== "supergroup" ||
+        message.chat.id !== forumTarget.chatId || message.message_thread_id !== forumTarget.threadId ||
+        !sender || sender.is_bot || !Number.isSafeInteger(sender.id) || sender.id <= 0) {
+      return { kind: "ignore" };
+    }
+    if (query) return { kind: "callback", query, authorization: { kind: "allow" } };
+    const lifecycle = getTelegramTopicLifecycleUpdate(message);
+    if (lifecycle) return { kind: "topic-lifecycle", lifecycle };
+    return {
+      kind: update.edited_message ? "edited-message" : "message",
+      message: message as NonNullable<TUpdate["message"] | TUpdate["edited_message"]> & { from: TelegramUser },
+      authorization: { kind: "allow" },
+    };
+  }
   if (update.message_reaction) {
     return { kind: "reaction", reactionUpdate: update.message_reaction };
   }
@@ -1047,13 +1072,14 @@ export function buildTelegramUpdateExecutionPlanFromUpdate<
 >(
   update: TUpdate,
   allowedUserId?: number,
+  forumTarget?: TelegramForumTarget,
 ): TelegramUpdateExecutionPlan<
   NonNullable<TUpdate["message_reaction"]>,
   NonNullable<TUpdate["callback_query"]>,
   NonNullable<TUpdate["message"] | TUpdate["edited_message"]>
 > {
   return buildTelegramUpdateExecutionPlan(
-    buildTelegramUpdateFlowAction(update, allowedUserId),
+    buildTelegramUpdateFlowAction(update, allowedUserId, forumTarget),
   );
 }
 
@@ -1088,6 +1114,7 @@ export interface TelegramUpdateRuntimeDeps<
   TMessage extends TelegramUpdateMessage = TelegramUpdateMessage,
 > {
   ctx: TContext;
+  forumTarget?: TelegramForumTarget;
   execution?: TelegramUpdateExecutionFence;
   getCurrentInstanceId?: () => string | undefined;
   getMessageOwnership?: TelegramMessageOwnershipLookup;
@@ -1161,6 +1188,7 @@ export interface TelegramUpdateRuntimeControllerDeps<
   TMessage extends TelegramUpdateMessage = TelegramUpdateMessage,
 > {
   getAllowedUserId: () => number | undefined;
+  getForumTarget?: () => TelegramForumTarget | undefined;
   getCurrentInstanceId?: () => string | undefined;
   getMessageOwnership?: TelegramMessageOwnershipLookup;
   getTargetOwnership?: TelegramTargetOwnershipLookup;
@@ -1369,7 +1397,7 @@ export async function executeTelegramUpdate<
     ? { ...deps, getMessageOwnership: undefined }
     : deps;
   await executeTelegramUpdatePlan(
-    buildTelegramUpdateExecutionPlanFromUpdate(update, allowedUserId),
+    buildTelegramUpdateExecutionPlanFromUpdate(update, allowedUserId, deps.forumTarget),
     runtimeDeps,
   );
 }
@@ -1395,6 +1423,7 @@ export function createTelegramPairedUpdateRuntime<
 ): TelegramUpdateRuntimeController<TContext, TUpdate> {
   return createTelegramUpdateRuntime({
     getAllowedUserId: deps.getAllowedUserId,
+    getForumTarget: deps.getForumTarget,
     getCurrentInstanceId: deps.getCurrentInstanceId,
     getMessageOwnership: deps.getMessageOwnership,
     getTargetOwnership: deps.getTargetOwnership,
@@ -1444,6 +1473,7 @@ export function createTelegramUpdateRuntime<
   ): Promise<void> => {
     await handleAuthorizedTelegramReactionUpdate(reactionUpdate, {
       allowedUserId: deps.getAllowedUserId(),
+      forumTarget: deps.getForumTarget?.(),
       ctx,
       flushPendingMediaGroupMessage: deps.flushPendingMediaGroupMessage,
       flushPendingTextGroupMessage: deps.flushPendingTextGroupMessage,
@@ -1462,6 +1492,7 @@ export function createTelegramUpdateRuntime<
     handleUpdate: (update, ctx, execution) =>
       executeTelegramUpdate(update, deps.getAllowedUserId(), {
         ctx,
+        forumTarget: deps.getForumTarget?.(),
         execution,
         getCurrentInstanceId: deps.getCurrentInstanceId,
         getMessageOwnership: deps.getMessageOwnership,
@@ -1493,6 +1524,7 @@ export function createTelegramUpdateRuntime<
 
 export interface AuthorizedTelegramReactionUpdateDeps<TContext> {
   allowedUserId?: number;
+  forumTarget?: TelegramForumTarget;
   ctx: TContext;
   getCurrentInstanceId?: () => string | undefined;
   getMessageOwnership?: TelegramMessageOwnershipLookup;
@@ -1514,9 +1546,11 @@ export async function handleAuthorizedTelegramReactionUpdate<TContext>(
 ): Promise<void> {
   const reactionUser = reactionUpdate.user;
   const allowedUserId = deps.allowedUserId;
+  const forumTarget = deps.forumTarget;
   if (
-    allowedUserId === undefined || !Number.isSafeInteger(allowedUserId) || allowedUserId <= 0 ||
-    !reactionUser || reactionUser.is_bot || reactionUser.id !== allowedUserId ||
+    !reactionUser || reactionUser.is_bot || !Number.isSafeInteger(reactionUser.id) || reactionUser.id <= 0 ||
+    (forumTarget ? reactionUpdate.chat.id !== forumTarget.chatId
+      : allowedUserId === undefined || !Number.isSafeInteger(allowedUserId) || allowedUserId <= 0 || reactionUser.id !== allowedUserId) ||
     reactionUpdate.actor_chat !== undefined
   ) return;
   const foreignOwnership = getForeignTelegramMessageOwnership(
@@ -1542,9 +1576,9 @@ export async function handleAuthorizedTelegramReactionUpdate<TContext>(
     return;
   }
   const reactionScope =
-    typeof reactionUpdate.chat.id === "number"
+    forumTarget ?? (typeof reactionUpdate.chat.id === "number"
       ? { chatId: reactionUpdate.chat.id }
-      : undefined;
+      : undefined);
   const reactionTransition = getTelegramQueueReactionTransition(
     reactionUpdate.old_reaction,
     reactionUpdate.new_reaction,

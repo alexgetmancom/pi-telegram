@@ -17,11 +17,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/llblab/pi-telegram.git"
+    "url": "https://github.com/alexgetmancom/pi-telegram.git"
   },
-  "homepage": "https://github.com/llblab/pi-telegram",
+  "homepage": "https://github.com/alexgetmancom/pi-telegram",
   "bugs": {
-    "url": "https://github.com/llblab/pi-telegram/issues"
+    "url": "https://github.com/alexgetmancom/pi-telegram/issues"
   },
   "engines": {
     "node": ">=22.19.0"
@@ -42,6 +42,7 @@
   "files": [
     "index.ts",
     "api/",
+    "agent/",
     "lib/",
     "dist/",
     "README.md",
@@ -51,6 +52,7 @@
     "docs/",
     "scripts/",
     "skills/",
+    "systemd/",
     "screenshot.png"
   ],
   "exports": {
@@ -115,6 +117,9 @@
     "@sinclair/typebox": "*"
   },
   "devDependencies": {
+    "@earendil-works/pi-agent-core": "1.0.3",
+    "@earendil-works/pi-ai": "1.0.3",
+    "@earendil-works/pi-coding-agent": "1.0.3",
     "@types/node": "latest",
     "typescript": "latest"
   }

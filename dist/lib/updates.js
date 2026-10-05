@@ -402,11 +402,36 @@ export function reportTelegramQueueAdmission(values, receipts) {
         report.binding.report(report.outcome);
     return true;
 }
-export function buildTelegramUpdateFlowAction(update, allowedUserId) {
+export function buildTelegramUpdateFlowAction(update, allowedUserId, forumTarget) {
     // Business chats are independent from bot chats even when chat/message IDs coincide.
     // Raw handlers may own that namespace; the default DM runtime has no deletion authority.
     if (update.deleted_business_messages !== undefined)
         return { kind: "ignore" };
+    if (forumTarget) {
+        const query = update.callback_query;
+        const message = query?.message ?? update.message ?? update.edited_message;
+        const sender = query?.from ?? message?.from;
+        if (update.message_reaction) {
+            return update.message_reaction.chat.id === forumTarget.chatId
+                ? { kind: "reaction", reactionUpdate: update.message_reaction }
+                : { kind: "ignore" };
+        }
+        if (!message || message.chat.type !== "supergroup" ||
+            message.chat.id !== forumTarget.chatId || message.message_thread_id !== forumTarget.threadId ||
+            !sender || sender.is_bot || !Number.isSafeInteger(sender.id) || sender.id <= 0) {
+            return { kind: "ignore" };
+        }
+        if (query)
+            return { kind: "callback", query, authorization: { kind: "allow" } };
+        const lifecycle = getTelegramTopicLifecycleUpdate(message);
+        if (lifecycle)
+            return { kind: "topic-lifecycle", lifecycle };
+        return {
+            kind: update.edited_message ? "edited-message" : "message",
+            message: message,
+            authorization: { kind: "allow" },
+        };
+    }
     if (update.message_reaction) {
         return { kind: "reaction", reactionUpdate: update.message_reaction };
     }
@@ -489,8 +514,8 @@ export function buildTelegramUpdateExecutionPlan(action) {
             };
     }
 }
-export function buildTelegramUpdateExecutionPlanFromUpdate(update, allowedUserId) {
-    return buildTelegramUpdateExecutionPlan(buildTelegramUpdateFlowAction(update, allowedUserId));
+export function buildTelegramUpdateExecutionPlanFromUpdate(update, allowedUserId, forumTarget) {
+    return buildTelegramUpdateExecutionPlan(buildTelegramUpdateFlowAction(update, allowedUserId, forumTarget));
 }
 const TELEGRAM_UNAUTHORIZED_DENIAL_COPY = "Access denied.";
 function formatTelegramUnauthorizedDenial(format) {
@@ -570,11 +595,12 @@ export async function executeTelegramUpdate(update, allowedUserId, deps) {
     const runtimeDeps = update[TELEGRAM_INTERNAL_AGENT_MESSAGE]
         ? { ...deps, getMessageOwnership: undefined }
         : deps;
-    await executeTelegramUpdatePlan(buildTelegramUpdateExecutionPlanFromUpdate(update, allowedUserId), runtimeDeps);
+    await executeTelegramUpdatePlan(buildTelegramUpdateExecutionPlanFromUpdate(update, allowedUserId, deps.forumTarget), runtimeDeps);
 }
 export function createTelegramPairedUpdateRuntime(deps) {
     return createTelegramUpdateRuntime({
         getAllowedUserId: deps.getAllowedUserId,
+        getForumTarget: deps.getForumTarget,
         getCurrentInstanceId: deps.getCurrentInstanceId,
         getMessageOwnership: deps.getMessageOwnership,
         getTargetOwnership: deps.getTargetOwnership,
@@ -605,6 +631,7 @@ export function createTelegramUpdateRuntime(deps) {
     const handleAuthorizedReactionUpdate = async (reactionUpdate, ctx) => {
         await handleAuthorizedTelegramReactionUpdate(reactionUpdate, {
             allowedUserId: deps.getAllowedUserId(),
+            forumTarget: deps.getForumTarget?.(),
             ctx,
             flushPendingMediaGroupMessage: deps.flushPendingMediaGroupMessage,
             flushPendingTextGroupMessage: deps.flushPendingTextGroupMessage,
@@ -619,6 +646,7 @@ export function createTelegramUpdateRuntime(deps) {
         handleAuthorizedReactionUpdate,
         handleUpdate: (update, ctx, execution) => executeTelegramUpdate(update, deps.getAllowedUserId(), {
             ctx,
+            forumTarget: deps.getForumTarget?.(),
             execution,
             getCurrentInstanceId: deps.getCurrentInstanceId,
             getMessageOwnership: deps.getMessageOwnership,
@@ -644,8 +672,10 @@ export function createTelegramUpdateRuntime(deps) {
 export async function handleAuthorizedTelegramReactionUpdate(reactionUpdate, deps) {
     const reactionUser = reactionUpdate.user;
     const allowedUserId = deps.allowedUserId;
-    if (allowedUserId === undefined || !Number.isSafeInteger(allowedUserId) || allowedUserId <= 0 ||
-        !reactionUser || reactionUser.is_bot || reactionUser.id !== allowedUserId ||
+    const forumTarget = deps.forumTarget;
+    if (!reactionUser || reactionUser.is_bot || !Number.isSafeInteger(reactionUser.id) || reactionUser.id <= 0 ||
+        (forumTarget ? reactionUpdate.chat.id !== forumTarget.chatId
+            : allowedUserId === undefined || !Number.isSafeInteger(allowedUserId) || allowedUserId <= 0 || reactionUser.id !== allowedUserId) ||
         reactionUpdate.actor_chat !== undefined)
         return;
     const foreignOwnership = getForeignTelegramMessageOwnership(getTelegramReactionMessageTarget(reactionUpdate), deps);
@@ -662,9 +692,9 @@ export async function handleAuthorizedTelegramReactionUpdate(reactionUpdate, dep
         }
         return;
     }
-    const reactionScope = typeof reactionUpdate.chat.id === "number"
+    const reactionScope = forumTarget ?? (typeof reactionUpdate.chat.id === "number"
         ? { chatId: reactionUpdate.chat.id }
-        : undefined;
+        : undefined);
     const reactionTransition = getTelegramQueueReactionTransition(reactionUpdate.old_reaction, reactionUpdate.new_reaction);
     if (!reactionTransition)
         return;

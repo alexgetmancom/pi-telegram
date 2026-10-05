@@ -286,6 +286,7 @@ export function getTelegramProfileFields(config) {
         ...(config.allowedUserId !== undefined
             ? { allowedUserId: config.allowedUserId }
             : {}),
+        ...(config.forumTarget !== undefined ? { forumTarget: config.forumTarget } : {}),
         ...(config.threadDisplayMode !== undefined
             ? { threadDisplayMode: config.threadDisplayMode }
             : {}),
@@ -293,7 +294,7 @@ export function getTelegramProfileFields(config) {
     };
 }
 function omitTelegramRootProfileFields(config) {
-    const { botToken: _botToken, botUsername: _botUsername, botId: _botId, allowedUserId: _allowedUserId, threadDisplayMode: _threadDisplayMode, lastUpdateId: _lastUpdateId, ...sharedConfig } = config;
+    const { botToken: _botToken, botUsername: _botUsername, botId: _botId, allowedUserId: _allowedUserId, forumTarget: _forumTarget, threadDisplayMode: _threadDisplayMode, lastUpdateId: _lastUpdateId, ...sharedConfig } = config;
     return sharedConfig;
 }
 function omitRetiredProactivePush(config) {
@@ -314,6 +315,13 @@ function omitRetiredProactivePush(config) {
 export function normalizeTelegramDefaultProfileConfig(config) {
     const retiredProactivePush = omitRetiredProactivePush(config);
     config = retiredProactivePush.config;
+    for (const profile of Object.values(config.profiles ?? {})) {
+        const target = profile.forumTarget;
+        if (target !== undefined && (!Number.isSafeInteger(target.chatId) || target.chatId >= 0 ||
+            !Number.isSafeInteger(target.threadId) || target.threadId <= 0)) {
+            throw new Error("Telegram forumTarget requires a negative chatId and a positive threadId.");
+        }
+    }
     const hasLegacyRootProfile = [
         "botToken",
         "botUsername",

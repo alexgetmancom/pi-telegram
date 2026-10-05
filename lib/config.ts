@@ -180,6 +180,11 @@ export type TelegramActivityVerbosity =
   | "tools"
   | "verbose";
 
+export interface TelegramForumTarget {
+  chatId: number;
+  threadId: number;
+}
+
 export interface TelegramConfig {
   /** @deprecated persisted identity belongs in profiles.default; retained for effective/legacy views */
   botToken?: string;
@@ -189,6 +194,8 @@ export interface TelegramConfig {
   botId?: number;
   /** @deprecated persisted identity belongs in profiles.default; retained for effective/legacy views */
   allowedUserId?: number;
+  /** Effective profile view: all humans in this forum topic share the session. */
+  forumTarget?: TelegramForumTarget;
   /** Effective view; persisted under profiles.<name>. */
   threadDisplayMode?: TelegramThreadDisplayMode;
   inboundHandlers?: TelegramInboundHandlerConfig[];
@@ -232,6 +239,7 @@ export interface TelegramBotProfile {
   botUsername?: string;
   botId?: number;
   allowedUserId?: number;
+  forumTarget?: TelegramForumTarget;
   threadDisplayMode?: TelegramThreadDisplayMode;
 }
 
@@ -555,6 +563,7 @@ export function getTelegramProfileFields(
     ...(config.allowedUserId !== undefined
       ? { allowedUserId: config.allowedUserId }
       : {}),
+    ...(config.forumTarget !== undefined ? { forumTarget: config.forumTarget } : {}),
     ...(config.threadDisplayMode !== undefined
       ? { threadDisplayMode: config.threadDisplayMode }
       : {}),
@@ -568,6 +577,7 @@ function omitTelegramRootProfileFields(config: TelegramConfig): TelegramConfig {
     botUsername: _botUsername,
     botId: _botId,
     allowedUserId: _allowedUserId,
+    forumTarget: _forumTarget,
     threadDisplayMode: _threadDisplayMode,
     lastUpdateId: _lastUpdateId,
     ...sharedConfig
@@ -601,6 +611,13 @@ export function normalizeTelegramDefaultProfileConfig(config: TelegramConfig): {
 } {
   const retiredProactivePush = omitRetiredProactivePush(config);
   config = retiredProactivePush.config;
+  for (const profile of Object.values(config.profiles ?? {})) {
+    const target = profile.forumTarget;
+    if (target !== undefined && (!Number.isSafeInteger(target.chatId) || target.chatId >= 0 ||
+        !Number.isSafeInteger(target.threadId) || target.threadId <= 0)) {
+      throw new Error("Telegram forumTarget requires a negative chatId and a positive threadId.");
+    }
+  }
   const hasLegacyRootProfile = [
     "botToken",
     "botUsername",

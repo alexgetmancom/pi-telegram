@@ -388,7 +388,7 @@ export interface TelegramWorkspaceRestoreOptions {
     onPublicationBoundary?: (boundary: "after-write-before-rename" | "after-rename") => void;
 }
 export interface TelegramSessionReplacementIntent {
-    continuity: "workspace-thread" | "classic-chat";
+    continuity: "workspace-thread" | "classic-chat" | "forum-topic";
     cwd: string;
     profileName: string;
     sourceSessionId: string;

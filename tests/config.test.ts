@@ -1961,6 +1961,23 @@ test("Token references persist and reload per named profile without copying secr
   }
 });
 
+test("Forum target survives settings persistence in its own profile", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pi-telegram-forum-config-"));
+  const configPath = join(dir, "telegram.json");
+  const target = { chatId: -1007, threadId: 16 };
+  try {
+    const store = createTelegramConfigStore({ agentDir: dir, configPath,
+      initialConfig: { profiles: { default: { botToken: "123:abc", forumTarget: target } } } });
+    await store.persist({ ...store.get(), assistant: { activity: "quiet" } });
+    const reloaded = createTelegramConfigStore({ agentDir: dir, configPath });
+    await reloaded.load();
+    assert.deepEqual(reloaded.get().forumTarget, target);
+    const persisted = JSON.parse(await readFile(configPath, "utf8"));
+    assert.deepEqual(persisted.profiles.default.forumTarget, target);
+    assert.equal(persisted.forumTarget, undefined);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
 test("Pairing admission hashes the resolved token reference", async () => {
   const agentDir = await mkdtemp(join(tmpdir(), "pi-telegram-token-ref-pairing-"));
   const configPath = join(agentDir, "telegram.json");

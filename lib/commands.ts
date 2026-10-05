@@ -2478,6 +2478,7 @@ export interface TelegramSessionActionAssemblyDeps {
   };
   getProfileName: () => string | undefined;
   ownsPersistence: () => boolean;
+  getForumTarget?: () => { chatId: number; threadId: number } | undefined;
   /**
    * Registered-follower port. A follower cannot persist leader-owned state, so
    * its Workspace Thread intent is published and claimed by the leader over
@@ -2537,21 +2538,23 @@ export function createTelegramSessionActionAssembly(
       if (follower && deps.store.refresh) await deps.store.refresh();
       else await deps.store.load();
       const sessionId = ctx.sessionManager.getSessionId();
+      const forumTarget = deps.getForumTarget?.();
+      const isForumTopic = forumTarget?.chatId === target.chatId && forumTarget.threadId === target.threadId;
       const binding = typeof target.threadId === "number"
         ? deps.store.getWorkspaceBindingByTarget(target)
         : undefined;
       if (typeof target.threadId === "number" &&
-          (!binding || binding.cwd !== ctx.cwd || binding.sessionId !== sessionId)) {
+          !isForumTopic && (!binding || binding.cwd !== ctx.cwd || binding.sessionId !== sessionId)) {
         throw new Error("Telegram session replacement binding is unavailable.");
       }
       const createdAtMs = now();
       const intent: TelegramSessionReplacementIntent = {
-        continuity: binding ? "workspace-thread" : "classic-chat",
+        continuity: isForumTopic ? "forum-topic" : binding ? "workspace-thread" : "classic-chat",
         cwd: binding?.cwd ?? ctx.cwd,
         profileName: deps.getProfileName() ?? "default",
         sourceSessionId: sessionId,
         sourceUpdateId: updateId,
-        target: binding ? { ...binding.target } : { chatId: target.chatId },
+        target: isForumTopic ? { ...forumTarget! } : binding ? { ...binding.target } : { chatId: target.chatId },
         messageId: target.messageId,
         ...(binding?.slot ? { slot: binding.slot } : {}),
         ...(binding?.manualThreadName ?? binding?.threadName
@@ -2576,6 +2579,10 @@ export function createTelegramSessionActionAssembly(
         async getIntent() { await deps.store.refresh?.(); return deps.store.getSessionReplacementIntent(); },
         hasSuccessorContinuity(intent) {
           if (intent.continuity === "classic-chat") return true;
+          if (intent.continuity === "forum-topic") {
+            const target = deps.getForumTarget?.();
+            return target?.chatId === intent.target.chatId && target.threadId === intent.target.threadId;
+          }
           if (deps.store.getWorkspaceBindingByTarget(intent.target, sessionId)?.cwd !==
               intent.cwd) return false;
           // A follower successor claims only after its own re-registration is live.

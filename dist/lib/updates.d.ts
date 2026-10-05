@@ -8,7 +8,7 @@ import type { TelegramBusEnvelope, TelegramBusFollowerView, TelegramBusForwardOw
 import type { TelegramMessageOwnershipStore } from "./ownership.ts";
 import { TELEGRAM_UPDATE_JOURNAL_VERSION, TELEGRAM_UPDATE_JOURNAL_EXCLUSION_VERSION, TELEGRAM_UPDATE_JOURNAL_CUSTODY_VERSION, type TelegramUpdateJournalEntryDigest, type TelegramUpdateJournalSourceCompletion, type TelegramUpdateJournalQueuedCompletion, type TelegramUpdateJournalQueuedReceiptEvidence, type TelegramInputJournalReceipt, type TelegramInputJournalSourceReference, type TelegramInputJournalStore, type TelegramJournaledUpdate, type TelegramUpdateJournalDeadQueueOwnerRecoveryResult, type TelegramUpdateJournalAppendResult, type TelegramUpdateJournalInputClaim, type TelegramUpdateJournalOperatorDispositionInput, type TelegramUpdateJournalOperatorDispositionResult, type TelegramUpdateJournalPendingAbandonmentInput, type TelegramUpdateJournalPendingAbandonmentResult, type TelegramUpdateJournalPendingRetentionEvidence, type TelegramUpdateJournalEntry, type TelegramUpdateJournalRoutingInput, type TelegramRoutingInputJournal, type TelegramRoutingInputExpiryResult, type TelegramUpdateJournalQueueDiscardResult, type TelegramUpdateJournalQueueHandoffAcceptResult, type TelegramUpdateJournalQueueHandoffCancelResult, type TelegramUpdateJournalQueueHandoffInput, type TelegramUpdateJournalQueueHandoffOfferResult, type TelegramUpdateJournalQueueOwner, type TelegramUpdateJournalQueueOwnerIdentity } from "./journal.ts";
 import { type PendingTelegramControlItem, type TelegramControlQueueHandoffPayload, type TelegramQueueAdmissionReceipt, type TelegramQueueHandoffPayload, type TelegramQueueHandoffStageResult, type TelegramQueueReactionDisposition, type TelegramQueueHandoffStagingRuntime, type TelegramQueueItem } from "./queue.ts";
-import { type TelegramAuthorizationState, type TelegramUserPairingRuntimeDeps } from "./config.ts";
+import { type TelegramAuthorizationState, type TelegramUserPairingRuntimeDeps, type TelegramForumTarget } from "./config.ts";
 export interface TelegramReactionTypeEmoji {
     type: "emoji";
     emoji: string;
@@ -293,7 +293,7 @@ export type TelegramUpdateFlowAction<TReactionUpdate extends TelegramMessageReac
     };
     authorization: TelegramAuthorizationState;
 };
-export declare function buildTelegramUpdateFlowAction<TUpdate extends TelegramUpdateFlow>(update: TUpdate, allowedUserId?: number): TelegramUpdateFlowAction<NonNullable<TUpdate["message_reaction"]>, NonNullable<TUpdate["callback_query"]>, NonNullable<TUpdate["message"] | TUpdate["edited_message"]>, NonNullable<TUpdate["guest_message"]>>;
+export declare function buildTelegramUpdateFlowAction<TUpdate extends TelegramUpdateFlow>(update: TUpdate, allowedUserId?: number, forumTarget?: TelegramForumTarget): TelegramUpdateFlowAction<NonNullable<TUpdate["message_reaction"]>, NonNullable<TUpdate["callback_query"]>, NonNullable<TUpdate["message"] | TUpdate["edited_message"]>, NonNullable<TUpdate["guest_message"]>>;
 export type TelegramUpdateExecutionPlan<TReactionUpdate extends TelegramMessageReactionUpdated = TelegramMessageReactionUpdated, TCallbackQuery extends TelegramCallbackQuery = TelegramCallbackQuery, TMessage extends TelegramUpdateMessage = TelegramUpdateMessage, TGuestMessage extends TelegramGuestMessage = TelegramGuestMessage> = {
     kind: "ignore";
 } | {
@@ -333,7 +333,7 @@ export type TelegramUpdateExecutionPlan<TReactionUpdate extends TelegramMessageR
     shouldDeny: boolean;
 };
 export declare function buildTelegramUpdateExecutionPlan<TReactionUpdate extends TelegramMessageReactionUpdated, TCallbackQuery extends TelegramCallbackQuery, TMessage extends TelegramUpdateMessage, TGuestMessage extends TelegramGuestMessage>(action: TelegramUpdateFlowAction<TReactionUpdate, TCallbackQuery, TMessage, TGuestMessage>): TelegramUpdateExecutionPlan<TReactionUpdate, TCallbackQuery, TMessage, TGuestMessage>;
-export declare function buildTelegramUpdateExecutionPlanFromUpdate<TUpdate extends TelegramUpdateFlow>(update: TUpdate, allowedUserId?: number): TelegramUpdateExecutionPlan<NonNullable<TUpdate["message_reaction"]>, NonNullable<TUpdate["callback_query"]>, NonNullable<TUpdate["message"] | TUpdate["edited_message"]>>;
+export declare function buildTelegramUpdateExecutionPlanFromUpdate<TUpdate extends TelegramUpdateFlow>(update: TUpdate, allowedUserId?: number, forumTarget?: TelegramForumTarget): TelegramUpdateExecutionPlan<NonNullable<TUpdate["message_reaction"]>, NonNullable<TUpdate["callback_query"]>, NonNullable<TUpdate["message"] | TUpdate["edited_message"]>>;
 export type TelegramMessageOwnershipRecorderInput = Parameters<TelegramMessageOwnershipStore["record"]>[0];
 export type TelegramMessageOwnershipRecorder = (input: TelegramMessageOwnershipRecorderInput) => void;
 interface TelegramUnauthorizedReplyOptions {
@@ -345,6 +345,7 @@ interface TelegramUnauthorizedReplyOptions {
 }
 export interface TelegramUpdateRuntimeDeps<TContext = unknown, TReactionUpdate extends TelegramMessageReactionUpdated = TelegramMessageReactionUpdated, TCallbackQuery extends TelegramCallbackQuery = TelegramCallbackQuery, TMessage extends TelegramUpdateMessage = TelegramUpdateMessage> {
     ctx: TContext;
+    forumTarget?: TelegramForumTarget;
     execution?: TelegramUpdateExecutionFence;
     getCurrentInstanceId?: () => string | undefined;
     getMessageOwnership?: TelegramMessageOwnershipLookup;
@@ -372,6 +373,7 @@ export interface TelegramUpdateRuntimeDeps<TContext = unknown, TReactionUpdate e
 }
 export interface TelegramUpdateRuntimeControllerDeps<TContext = unknown, TCallbackQuery extends TelegramCallbackQuery = TelegramCallbackQuery, TMessage extends TelegramUpdateMessage = TelegramUpdateMessage> {
     getAllowedUserId: () => number | undefined;
+    getForumTarget?: () => TelegramForumTarget | undefined;
     getCurrentInstanceId?: () => string | undefined;
     getMessageOwnership?: TelegramMessageOwnershipLookup;
     getTargetOwnership?: TelegramTargetOwnershipLookup;
@@ -414,6 +416,7 @@ export declare function createTelegramPairedUpdateRuntime<TContext = unknown, TU
 export declare function createTelegramUpdateRuntime<TContext = unknown, TUpdate extends TelegramUpdateFlow = TelegramUpdateFlow>(deps: TelegramUpdateRuntimeControllerDeps<TContext, NonNullable<TUpdate["callback_query"]>, NonNullable<TUpdate["message"] | TUpdate["edited_message"]>>): TelegramUpdateRuntimeController<TContext, TUpdate>;
 export interface AuthorizedTelegramReactionUpdateDeps<TContext> {
     allowedUserId?: number;
+    forumTarget?: TelegramForumTarget;
     ctx: TContext;
     getCurrentInstanceId?: () => string | undefined;
     getMessageOwnership?: TelegramMessageOwnershipLookup;

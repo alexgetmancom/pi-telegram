@@ -93,6 +93,7 @@ interface TelegramBotProfile {
   botUsername?: string; // runtime-managed
   botId?: number; // runtime-managed
   allowedUserId?: number;
+  forumTarget?: { chatId: number; threadId: number }; // shared session for all humans in this exact supergroup topic
   threadDisplayMode?: "letters" | "names" | "directory-snake" | "directory-title";
 }
 

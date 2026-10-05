@@ -1,5 +1,7 @@
 # pi-telegram
 
+This fork adds one shared family forum topic: every human participant can use the same Pi session and controls. See [family forum deployment](./docs/family-forum.md) for the systemd setup. Conversation, queue, models and compaction are native Pi.
+
 ![pi-telegram screenshot](screenshot.png)
 
 **A Telegram companion hub for live Pi sessions.**

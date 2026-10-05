@@ -428,6 +428,61 @@ test("Paired update runtime binds pairing ports into update routing", async () =
   ]);
 });
 
+test("Forum runtime admits every human in one exact topic, including shared buttons and edits", async () => {
+  const target = { chatId: -1007, threadId: 16 };
+  const events: string[] = [];
+  const runtime = createTelegramPairedUpdateRuntime({
+    getAllowedUserId: () => 7,
+    getForumTarget: () => target,
+    persistAllowedUserId: async () => { throw new Error("Forum members must not become paired owners"); },
+    updateStatus: () => {},
+    removePendingMediaGroupMessages: () => {},
+    removeQueuedTelegramTurnsByMessageIds: () => 0,
+    applyQueuedTelegramTurnReactionByMessageId: () => false,
+    answerCallbackQuery: async () => {},
+    answerGuestQuery: async () => {},
+    sendTextReply: async () => undefined,
+    handleAuthorizedTelegramMessage: async message => { events.push(`message:${message.from?.id}`); },
+    handleAuthorizedTelegramEditedMessage: async message => { events.push(`edit:${message.from?.id}`); },
+    handleAuthorizedTelegramCallbackQuery: async query => { events.push(`button:${query.from.id}`); },
+  });
+  for (const id of [7, 8, 9]) {
+    const message = { chat: { id: target.chatId, type: "supergroup" }, message_thread_id: 16,
+      message_id: id, from: { id, is_bot: false } };
+    await runtime.handleUpdate({ message }, undefined);
+    await runtime.handleUpdate({ edited_message: message }, undefined);
+    await runtime.handleUpdate({ callback_query: { id: `button-${id}`, from: message.from, message } }, undefined);
+  }
+  assert.deepEqual(events, ["message:7", "edit:7", "button:7", "message:8", "edit:8", "button:8",
+    "message:9", "edit:9", "button:9"]);
+  events.length = 0;
+  for (const [chatId, threadId, type, isBot] of [
+    [-1007, 17, "supergroup", false], [-1008, 16, "supergroup", false],
+    [7, undefined, "private", false], [-1007, 16, "supergroup", true],
+  ] as const) {
+    const message = { chat: { id: chatId, type }, message_thread_id: threadId,
+      from: { id: 7, is_bot: isBot } };
+    await runtime.handleUpdate({ message }, undefined);
+    await runtime.handleUpdate({ callback_query: { id: "outside", from: message.from, message } }, undefined);
+  }
+  await runtime.handleUpdate({ guest_message: { guest_query_id: "guest", from: { id: 7, is_bot: false },
+    chat: { id: -1007, type: "supergroup" } } }, undefined);
+  assert.deepEqual(events, []);
+});
+
+test("Forum reactions from another member mutate only the configured topic queue", async () => {
+  const scopes: unknown[] = [];
+  const deps = { ctx: undefined, allowedUserId: 7, forumTarget: { chatId: -1007, threadId: 16 },
+    applyQueuedTelegramTurnReactionByMessageId: (_id: number, _action: unknown, _ctx: unknown, scope: unknown) => {
+      scopes.push(scope); return true;
+    } };
+  const reaction = { chat: { id: -1007, type: "supergroup" }, user: { id: 8, is_bot: false },
+    message_id: 10, old_reaction: [], new_reaction: [{ type: "emoji" as const, emoji: "👍" }] };
+  await handleAuthorizedTelegramReactionUpdate(reaction, deps);
+  await handleAuthorizedTelegramReactionUpdate({ ...reaction, chat: { id: -1008, type: "supergroup" } }, deps);
+  assert.deepEqual(scopes, [{ chatId: -1007, threadId: 16 }]);
+});
+
 test("Unpaired messages, edits, and callbacks require successful pairing publication before execution", async () => {
   const message = { chat: { id: 7, type: "private" }, from: { id: 7, is_bot: false },
     message_id: 10, message_thread_id: 42 };

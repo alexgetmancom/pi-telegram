@@ -2765,6 +2765,35 @@ test("Classic session action publishes chat continuity without a Workspace bindi
   }]);
 });
 
+test("Forum new-session action preserves the shared topic without provisioning a private Thread", async () => {
+  const commands = new Map<string, RegisteredCommand>();
+  const dispatched: string[] = [];
+  const intents: TelegramSessionReplacementIntent[] = [];
+  const target = { chatId: -1007, threadId: 16 };
+  const assembly = createTelegramSessionActionAssembly({
+    registerCommand: (name, definition) => { commands.set(name, definition as RegisteredCommand); },
+    sendUserMessage: content => { dispatched.push(content as string); },
+    store: { load: async () => {}, getWorkspaceBindingByTarget: () => undefined,
+      getSessionReplacementIntent: () => undefined,
+      commitSessionReplacementIntent: async intent => { intents.push(intent); return true; },
+      removeSessionReplacementIntent: async () => true },
+    getProfileName: () => undefined, ownsPersistence: () => true, getForumTarget: () => target,
+    sendResult: async () => ({ ok: true }), handoffTtlMs: 30_000, now: () => 1000,
+  });
+  assembly.action.register();
+  assert.equal(assembly.action.scheduleAfterUpdate(41, { ...target, messageId: 9 }), true);
+  assembly.action.onUpdateCompleted(41);
+  await Promise.resolve();
+  let replaced = false;
+  await commands.get(TELEGRAM_INTERNAL_COMMAND_NAME)!.handler(getInternalCommandToken(dispatched[0]!), {
+    cwd: "/repo", sessionManager: { getSessionId: () => "session-old" },
+    newSession: async () => { replaced = true; return { cancelled: false }; },
+  } as unknown as ExtensionCommandContext);
+  assert.equal(replaced, true);
+  assert.equal(intents[0]?.continuity, "forum-topic");
+  assert.deepEqual(intents[0]?.target, target);
+});
+
 test("Follower Thread session action publishes and settles through leader-mediated authority", async () => {
   const threadTarget = { chatId: 7, threadId: 8 };
   const createHarness = (options: {

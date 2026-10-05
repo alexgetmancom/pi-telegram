@@ -224,6 +224,7 @@ export default function (pi) {
         store: threadStore,
         getProfileName: configStore.getActiveProfileName,
         ownsPersistence: lockRuntime.owns,
+        getForumTarget() { return configStore.get().forumTarget; },
         follower: {
             instanceId: telegramInstanceId,
             isRegisteredFor(target) {
@@ -620,9 +621,9 @@ export default function (pi) {
     const deliveryTargetPolicyRuntime = Delivery.createTelegramDeliveryTargetPolicyRuntime({
         ownsDirect: lockRuntime.owns,
         isFollowerRegistered: telegramBusFollowerRegistrationState.isRegistered,
-        getAllowedChatId: configStore.getAllowedUserId,
+        getAllowedChatId() { return configStore.get().forumTarget?.chatId ?? configStore.getAllowedUserId(); },
         getFollowerTarget: telegramBusFollowerRegistrationState.getTarget,
-        getLeaderTarget: telegramBusLeaderState.getTarget,
+        getLeaderTarget() { return configStore.get().forumTarget ?? telegramBusLeaderState.getTarget(); },
         listThreadRecords: threadStore.list,
         getActiveTurnTarget: activeTurnRuntime.getTarget,
         getActiveGuestQueryId: activeTurnRuntime.getGuestQueryId,

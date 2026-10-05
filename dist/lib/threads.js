@@ -582,10 +582,12 @@ export function normalizeTelegramSessionReplacementIntent(value) {
                 record.sourceInstanceId.length > 256)))
         return undefined;
     const continuity = record.continuity === "workspace-thread" ||
-        record.continuity === "classic-chat"
+        record.continuity === "classic-chat" || record.continuity === "forum-topic"
         ? record.continuity
         : target.threadId !== undefined ? "workspace-thread" : "classic-chat";
-    if ((continuity === "workspace-thread") !== (target.threadId !== undefined)) {
+    if ((continuity === "workspace-thread" && target.threadId === undefined) ||
+        (continuity === "classic-chat" && target.threadId !== undefined) ||
+        (continuity === "forum-topic" && (target.chatId >= 0 || typeof target.threadId !== "number" || target.threadId <= 0))) {
         return undefined;
     }
     return {

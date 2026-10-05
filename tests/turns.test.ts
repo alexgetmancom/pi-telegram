@@ -18,6 +18,7 @@ import {
   type TelegramTurnMessage,
   createTelegramQueuedPromptEditRuntime,
   formatTelegramTurnStatusSummary,
+  formatTelegramTurnPrefix,
   TELEGRAM_GUEST_TURN_NOTE,
   truncateTelegramQueueSummary,
   updateQueuedTelegramPromptTurnText,
@@ -1321,4 +1322,35 @@ test("getTelegramVoiceReplyMode falls back to manual for invalid or missing conf
   assert.equal(getTelegramVoiceReplyMode({}), "manual");
   assert.equal(getTelegramVoiceReplyMode(null as any), "manual");
   assert.equal(getTelegramVoiceReplyMode(undefined), "manual");
+});
+
+
+test("Forum turns keep each author's identity through shared history and queued edits", async () => {
+  const buildTurn = createTelegramPromptTurnRuntimeBuilder({
+    allocateQueueOrder: () => 1,
+    downloadFile: async (_fileId, fileName) => `/tmp/${fileName}`,
+  });
+  const alex = await buildTurn([{
+    message_id: 1, chat: { id: -1007, type: "supergroup" }, message_thread_id: 16,
+    from: { id: 101, first_name: "Alex" }, text: "I prefer comedies",
+  }]);
+  assert.equal(alex.content[0].type === "text" && alex.content[0].text,
+    "[telegram|user:101|name:Alex] I prefer comedies");
+  assert.equal(alex.historyText, "[telegram|user:101|name:Alex] I prefer comedies");
+  const maru = await buildTurn([{
+    message_id: 2, chat: { id: -1007, type: "supergroup" }, message_thread_id: 16,
+    from: { id: 202, first_name: "Maru" }, text: "What did Alex ask?",
+  }], [alex]);
+  const text = maru.content[0].type === "text" ? maru.content[0].text : "";
+  assert.match(text, /^\[telegram\|user:202\|name:Maru\]/);
+  assert.ok(text.includes("[telegram|user:101|name:Alex] I prefer comedies"));
+  const edited = updateTelegramPromptTurnText({ turn: alex, telegramPrefix: "[telegram]", rawText: "I prefer dramas" });
+  assert.equal(edited.content[0].type === "text" && edited.content[0].text,
+    "[telegram|user:101|name:Alex] I prefer dramas");
+  assert.equal(edited.historyText, "[telegram|user:101|name:Alex] I prefer dramas");
+  assert.equal(formatTelegramTurnPrefix({ message_id: 1, chat: { id: -1007, type: "supergroup" },
+    from: { id: 101, first_name: "Alex]\n|user:202" } }, "[telegram|thread:AI]"),
+    "[telegram|thread:AI|user:101|name:Alex user:202]");
+  assert.equal(formatTelegramTurnPrefix({ message_id: 1, chat: { id: 101, type: "private" },
+    from: { id: 101, first_name: "Alex" } }), "[telegram]");
 });

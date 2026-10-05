@@ -935,3 +935,12 @@ test("Button callback handler enqueues owned actions, marks the selected button,
     "Already queued.",
   ]);
 });
+
+
+test("Forum button prompt retains the clicker's identity in folded history", () => {
+  const turn = createTelegramButtonPromptTurn({ chatId: -1007, replyToMessageId: 20, queueOrder: 1,
+    action: { text: "Run", prompt: "Run this now." }, target: { chatId: -1007, threadId: 16 },
+    telegramPrefix: "[telegram|thread:AI|user:202|name:Maru]" });
+  assert.deepEqual(turn.content, [{ type: "text", text: "[telegram|thread:AI|user:202|name:Maru] Run this now." }]);
+  assert.equal(turn.historyText, "[telegram|thread:AI|user:202|name:Maru] Run this now.");
+});

@@ -5,6 +5,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import type { TelegramMessageUser } from "./media.ts";
 
 import type {
   TelegramInlineKeyboardButtonStyle,
@@ -60,11 +61,12 @@ export interface TelegramButtonActionStore {
 
 export interface TelegramButtonCallbackQuery {
   id: string;
+  from?: TelegramMessageUser;
   data?: string;
   message?: {
     message_id?: number;
     message_thread_id?: number;
-    chat?: { id?: number };
+    chat?: { id?: number; type?: string };
     reply_markup?: TelegramOutboundButtonMarkup;
   };
 }
@@ -282,7 +284,7 @@ export function createTelegramButtonPromptTurn(options: {
     laneOrder: options.queueOrder,
     queuedAttachments: [],
     content: [{ type: "text", text: prompt }],
-    historyText: options.action.prompt,
+    historyText: options.telegramPrefix?.includes("|user:") ? prompt : options.action.prompt,
     statusSummary: truncateTelegramQueueSummary(
       options.action.text || options.action.prompt,
     ),

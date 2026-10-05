@@ -3,7 +3,7 @@
  * Zones: telegram inbound, pi agent prompt content, queue
  * Owns prompt-turn summary and content construction so queued Telegram turns are assembled consistently
  */
-import { type DownloadedTelegramMessageFile, type DownloadTelegramMessageFilesDeps, type TelegramMediaMessage } from "./media.ts";
+import { type DownloadedTelegramMessageFile, type DownloadTelegramMessageFilesDeps, type TelegramMediaMessage, type TelegramMessageUser } from "./media.ts";
 import { truncateTelegramQueueSummary, type PendingTelegramTurn, type TelegramPreparedPromptTurn, type TelegramQueueItem, type TelegramQueueStore } from "./queue.ts";
 import { type TelegramVoiceReplyMode } from "./voice.ts";
 export declare const TELEGRAM_PREFIX = "[telegram]";
@@ -13,6 +13,7 @@ export interface TelegramTurnTarget {
     threadId?: number;
 }
 export interface TelegramTurnMessage {
+    from?: TelegramMessageUser;
     message_id: number;
     message_thread_id?: number;
     pi_telegram_agent_source_thread?: string;
@@ -24,6 +25,7 @@ export interface TelegramTurnMessage {
 }
 export type DownloadedTelegramTurnFile = DownloadedTelegramMessageFile;
 export declare function createTelegramTurnPrefix(attributes?: Record<string, string | undefined>): string;
+export declare function formatTelegramTurnPrefix(message: TelegramTurnMessage, basePrefix?: string): string;
 export { truncateTelegramQueueSummary };
 export declare function formatTelegramTurnStatusSummary(rawText: string, files: DownloadedTelegramTurnFile[], handlerOutputs?: string[]): string;
 export declare function buildTelegramTurnPrompt(options: {

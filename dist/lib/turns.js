@@ -30,8 +30,11 @@ export function createTelegramTurnPrefix(attributes = {}) {
     }
     return `[${parts.join("|")}]`;
 }
-function formatTelegramTurnPrefix(_message, basePrefix = TELEGRAM_PREFIX) {
-    return basePrefix;
+export function formatTelegramTurnPrefix(message, basePrefix = TELEGRAM_PREFIX) {
+    if (message.chat.type !== "supergroup" || message.from?.id === undefined)
+        return basePrefix;
+    const name = formatTelegramPrefixAttributeValue([message.from.first_name, message.from.last_name].filter(Boolean).join(" ") || message.from.username || "");
+    return `${basePrefix.slice(0, -1)}|user:${message.from.id}${name ? `|name:${name}` : ""}]`;
 }
 export { truncateTelegramQueueSummary };
 export function formatTelegramTurnStatusSummary(rawText, files, handlerOutputs = []) {
@@ -201,7 +204,7 @@ export function updateTelegramPromptTurnText(options) {
             return block;
         const updated = buildEditedTelegramPromptText({
             existingPrompt: block.text,
-            telegramPrefix: options.telegramPrefix,
+            telegramPrefix: block.text.match(/^\[telegram(?:\|[^\]]*)?\]/)?.[0] ?? options.telegramPrefix,
             rawText: options.rawText,
         });
         attachmentFiles = updated.attachmentFiles;
@@ -210,10 +213,13 @@ export function updateTelegramPromptTurnText(options) {
             text: updated.text,
         };
     });
+    const prefix = nextContent[0]?.type === "text"
+        ? nextContent[0].text.match(/^\[telegram(?:\|[^\]]*)?\]/)?.[0]
+        : undefined;
     return {
         ...options.turn,
         content: nextContent,
-        historyText: formatTelegramHistoryText(options.rawText, attachmentFiles),
+        historyText: `${prefix?.includes("|user:") ? prefix + " " : ""}${formatTelegramHistoryText(options.rawText, attachmentFiles)}`,
         statusSummary: formatTelegramTurnStatusSummary(options.statusText ?? options.rawText, attachmentFiles),
     };
 }
@@ -445,11 +451,12 @@ function buildPreparedTelegramPromptTurn(options, images) {
     }
     const hasVoiceFile = options.files.some((f) => f.kind === "voice" || f.kind === "audio");
     const voiceReplyMode = options.voiceReplyMode ?? getTelegramVoiceReplyMode();
+    const telegramPrefix = formatTelegramTurnPrefix(firstMessage, options.telegramPrefix);
     const content = [
         {
             type: "text",
             text: buildTelegramTurnPrompt({
-                telegramPrefix: formatTelegramTurnPrefix(firstMessage, options.telegramPrefix),
+                telegramPrefix,
                 rawText: options.rawText,
                 files: options.files,
                 promptFiles: options.promptFiles,
@@ -481,7 +488,7 @@ function buildPreparedTelegramPromptTurn(options, images) {
         laneOrder: options.queueOrder,
         queuedAttachments: [],
         content,
-        historyText: appendTelegramSourceContext(formatTelegramHistoryText(options.rawText, options.displayFiles ?? options.promptFiles ?? options.files, options.handlerOutputs), options.sourceContext),
+        historyText: appendTelegramSourceContext((telegramPrefix.includes("|user:") ? telegramPrefix + " " : "") + formatTelegramHistoryText(options.rawText, options.displayFiles ?? options.promptFiles ?? options.files, options.handlerOutputs), options.sourceContext),
         statusSummary: formatTelegramTurnStatusSummary(options.statusText ?? options.rawText, options.displayFiles ?? options.promptFiles ?? options.files, options.handlerOutputs),
         ...(admissionReceipts.length > 0 ? { admissionReceipts } : {}),
         // Voice tagging (used for preview suppression and prompt guidance)

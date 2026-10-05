@@ -2935,12 +2935,16 @@ export function createTelegramInboundRouteRuntime(deps) {
                             replyToMessageId: messageId,
                             queueOrder,
                             action,
-                            telegramPrefix: Turns.createTelegramTurnPrefix({
+                            telegramPrefix: Turns.formatTelegramTurnPrefix({
+                                message_id: messageId,
+                                chat: { id: chatId, type: buttonQuery.message?.chat?.type },
+                                from: buttonQuery.from,
+                            }, Turns.createTelegramTurnPrefix({
                                 thread: resolveTelegramThreadLabel({
                                     chat: { id: chatId },
                                     message_thread_id: buttonQuery.message?.message_thread_id,
                                 }),
-                            }),
+                            })),
                         }),
                         ...(admissionReceipts.length > 0 ? { admissionReceipts } : {}),
                     };

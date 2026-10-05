@@ -168,7 +168,7 @@ export function createTelegramButtonPromptTurn(options) {
         laneOrder: options.queueOrder,
         queuedAttachments: [],
         content: [{ type: "text", text: prompt }],
-        historyText: options.action.prompt,
+        historyText: options.telegramPrefix?.includes("|user:") ? prompt : options.action.prompt,
         statusSummary: truncateTelegramQueueSummary(options.action.text || options.action.prompt),
     };
 }

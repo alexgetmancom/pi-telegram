@@ -3,6 +3,7 @@
  * Zones: telegram outbound, assistant markup, callback routing
  * Owns assistant-authored telegram_button extraction, button action storage, callback handling, and prompt-turn construction
  */
+import type { TelegramMessageUser } from "./media.ts";
 import type { TelegramInlineKeyboardButtonStyle, TelegramInlineKeyboardMarkup } from "./keyboard.ts";
 import { type PendingTelegramTurn, type TelegramQueueTarget } from "./queue.ts";
 export interface TelegramOutboundButtonBinding {
@@ -31,12 +32,14 @@ export interface TelegramButtonActionStore {
 }
 export interface TelegramButtonCallbackQuery {
     id: string;
+    from?: TelegramMessageUser;
     data?: string;
     message?: {
         message_id?: number;
         message_thread_id?: number;
         chat?: {
             id?: number;
+            type?: string;
         };
         reply_markup?: TelegramOutboundButtonMarkup;
     };

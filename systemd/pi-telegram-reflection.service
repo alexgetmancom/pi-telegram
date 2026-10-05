@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily family Telegram memory reflection
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h
+EnvironmentFile=%h/.config/pi-telegram/secrets.env
+ExecStart=/usr/bin/node %h/projects/home/pi-telegram/scripts/reflect.mjs
+TimeoutStartSec=30min
+UMask=0077
+NoNewPrivileges=true

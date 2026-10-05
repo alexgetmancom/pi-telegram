@@ -4,6 +4,7 @@
 import { createServer } from "node:http";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import {
   createAgentSessionFromServices,
@@ -28,7 +29,7 @@ function log(event, detail = {}) {
 const runtime = await createAgentSessionRuntime(async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
   const services = await createAgentSessionServices({
     cwd, agentDir,
-    resourceLoaderOptions: { noContextFiles: true, appendSystemPrompt: [join(root, "agent", "AGENTS.md")] },
+    resourceLoaderOptions: { noContextFiles: true, appendSystemPrompt: [join(root, "agent", "AGENTS.md"), ...["alex.md", "maru.md"].map(name => readFileSync(join(homedir(), ".local/share/family", name), "utf8"))] },
   });
   const result = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent });
   if (services.diagnostics.some(item => item.type === "error") || result.extensionsResult.errors.length ||

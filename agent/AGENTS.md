@@ -16,20 +16,18 @@ Keep personal facts in these files, not in this AGENTS.md or Git. Explicit “re
 
 For an unexpectedly inaccessible site, update its domain entry in `network-issues.md`: date, vantage point (usually VM 106), exact observed symptom/error, available alternative, and status. A timeout is not proof of a Russian block; record an unknown cause until verified. Strip secrets and signed URL parameters. Avoid repeated long retries on known failures. No VPN, firewall or routing changes are authorized by a journal entry; future fixes require a family request.
 
+## Topics
+
+The AI topic is the general family assistant with host tools. The Cinema topic has its own history and a restricted botflix tool. Media conversations belong there; no conversation history is automatically shared between topics.
+
 ## Host and services
 
 - This is VM 106, not the Proxmox host. Start with local inspection. Other hosts require an explicit request from the family.
 - Botflix runs as Docker container `botflix-media`; its Compose project lives under `/opt/agent-command-router`. Inspect its labels and mounts before changing source or rebuilding.
 - qBittorrent Web API is at `http://127.0.0.1:8080`, Jellyfin at `http://127.0.0.1:8096`. Their Compose file is `/opt/media-stack/compose.yaml`; media lives in `/data/media`.
 - Prefer authenticated service APIs for torrent ordering, completion status and library metadata. File modification dates are not proof of the most recent download. Check the result before asserting success.
-- For media requests, use `/home/alex/.local/bin/botflix` first. This separate Go CLI searches LostFilm, Rutor, NNM and RuTracker, browses LostFilm episodes/releases, controls qBittorrent and queries Jellyfin. Run `botflix help` via that absolute path for arguments; options precede positional arguments. Source and operator instructions are in `/home/alex/projects/home/cli-botlix/README.md`.
-- The Telegram BotFlix continues independently. Do not modify, stop or rebuild it to use the CLI. Subscriptions and its scheduled jobs remain owned by that bot.
-- Read `sources[].error` and `verification_required`; a blocked source is not an empty search. NNM/RuTracker cookies and the matching browser User-Agent are private in `~/.config/botflix/config.json`. If Cloudflare blocks access, open that site in the existing VM browser, complete verification/login, run `/home/alex/.local/bin/botflix auth`, and verify the search again. Ask the family to complete interactive verification when needed; never send cookie values to chat or claim a fixed lifetime.
-- Identify torrent changes by the returned exact hash. Repeating a download returns `existing: true`; removal keeps media unless `--delete-files` was explicitly requested. A full season requires its series URL, season and quality. Preserve `/downloads/movies` and `/downloads/shows/NAME/Season NN`.
-- Existing service configuration contains API credentials. Read only the needed fields; never print, return, commit or send secret values. The assistant's secrets are in `~/.config/pi-telegram/secrets.env`.
-- Pi Telegram runs under the user service `pi-telegram.service`. Read status with `systemctl --user status pi-telegram` and logs with `journalctl --user -u pi-telegram`. Runtime diagnostics are in `~/.pi/agent/tmp/pi-telegram/logs.jsonl`; native session history is in `~/.pi/agent/sessions/pi-telegram`.
-- Voice and audio inputs are transcribed automatically by the native inbound handler using the existing `agent-asr` Docker service. Treat the transcript in `[outputs]` as the participant's request, preserving its author and reply context. Reply with text; do not transcribe again when a transcript is already present.
-- To transcribe an audio file explicitly, run `node /home/alex/projects/home/pi-telegram/scripts/transcribe.mjs /absolute/path/to/audio`. The script resolves the ASR container address on each call; no external speech API key is required.
+- The Cinema topic uses the separate Go BotFlix CLI at `/home/alex/.local/bin/botflix`. Diagnose or repair it here only when asked. The old Telegram BotFlix continues independently with its subscriptions and schedules.
+
 
 ## Work on the machine
 

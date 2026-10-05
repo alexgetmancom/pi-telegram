@@ -1,6 +1,10 @@
 # Family forum deployment
 
-The forum uses one native Pi session. Every human in the configured supergroup topic can write, edit prompts, press shared buttons, switch models, compact and start a new session. `forumTarget` replaces the owner-ID admission rule for that profile; other chats, topics and bot senders are ignored. Default private-DM behavior is unchanged when this field is absent.
+The forum has two independent native Pi sessions, served by one process and one Telegram poller. AI keeps the ordinary bridge and its shared controls. Cinema (topic 3) has its own history, prompt and model, with only the bounded `botflix` tool. Both Alex and Maru share each topic's conversation; bot messages are ignored. General remains silent. The old Telegram BotFlix runs independently.
+
+Cinema accepts text requests and `/start`, `/new`, `/compact`, `/stop`, `/model`; `/model provider/model` changes only Cinema's model. Voice, attachments and the ordinary inline settings menu remain in AI. Cinema has no shell, filesystem tools, browser authentication, arbitrary local torrent files, poster file writes or file deletion. Download URLs are limited to the configured tracker domains. Removing a torrent preserves its files. BotFlix's service credentials remain outside model context.
+
+The trusted host registers Cinema's exact forum destination with `registerTelegramDeliveryTarget` from the delivery API and consumes its human text updates through the public update-handler API. It neither starts another poller nor grants a model a destination-registration tool. Disposing the host revokes that delivery target.
 
 ## Install on the host
 
@@ -34,7 +38,7 @@ curl --fail http://127.0.0.1:8186/healthz
 
 `/start` opens the menu; `/model` selects the model; `/compact` summarizes context; `/new` starts a fresh shared session with native confirmation and retains this topic. A model switch continues the same native conversation. Older sessions remain on disk.
 
-Runtime instructions are in [agent/AGENTS.md](../agent/AGENTS.md). Review its host paths before copying this setup to another machine. Diagnose with `journalctl --user -u pi-telegram` and `~/.pi/agent/tmp/pi-telegram/logs.jsonl`. Session history lives under `~/.pi/agent/sessions/pi-telegram` and resumes after restart. Interrupted in-memory queued work is not replayed; resend it.
+Runtime instructions are in [agent/AGENTS.md](../agent/AGENTS.md) for AI and [agent/CINEMA.md](../agent/CINEMA.md) for Cinema. Both native histories live under `~/.pi/agent/sessions/pi-telegram`, isolated by session CWD (home for AI, `~/projects/home/cli-botlix` for Cinema), and resume after restart. `/new` affects only its topic. Diagnose with `journalctl --user -u pi-telegram`; health at `http://127.0.0.1:8186/healthz` includes both session IDs and Cinema's active tools. Interrupted in-memory queued work is not replayed; resend it.
 
 ## Private family memory and daily reflection
 

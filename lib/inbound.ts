@@ -38,7 +38,7 @@ export async function transcribeTelegramVoiceMessage(message: TelegramMediaMessa
       !message.from || message.from.is_bot || !audio) {
     throw new Error("Voice input is unavailable for this message.");
   }
-  const files = await downloadTelegramMessageFiles([{ message_id: message.message_id,
+  const files = await downloadTelegramMessageFiles([{ message_id: message.message_id, chat: message.chat,
     voice: message.voice, audio: message.audio }], runtime);
   const result = await processTelegramInboundHandlers({ files, rawText: "", handlers: runtime.getHandlers(),
     cwd, execCommand: runtime.execCommand });

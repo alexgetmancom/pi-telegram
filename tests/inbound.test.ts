@@ -32,7 +32,9 @@ test("Companion voice input reuses configured STT and returns text without file 
   const downloaded: string[] = [];
   bindTelegramVoiceInputRuntime({
     getAllowedChatId: () => -1007,
-    async downloadFile(id) { downloaded.push(id); return "/tmp/voice.ogg"; },
+    async downloadFile(id, _name, source) {
+      assert.equal(source?.chat?.id, -1007); downloaded.push(id); return "/tmp/voice.ogg";
+    },
     getHandlers: () => [{ mime: "audio/*", template: '/tools/stt "{file}"' }],
     async execCommand(command, args) {
       assert.equal(command, "/tools/stt"); assert.deepEqual(args, ["/tmp/voice.ogg"]);

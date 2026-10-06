@@ -32,7 +32,7 @@ import {
   createTelegramBusFollowerSessionRefreshHook,
   createTelegramBusFollowerSessionReplacementSuspender,
   createTelegramBusForwardedUpdateReceiverRuntime,
-  createTelegramManualFollowerProfileKeyResolver,
+  createTelegramFollowerProfileKeyResolver,
   getTelegramFollowerSessionHandoff,
   prepareTelegramBusFollowerJournaledUpdateForExecution,
   setTelegramFollowerSessionHandoff,
@@ -187,7 +187,7 @@ test("Follower control state owns active auth and transient lifecycle projection
 
 test("Bus follower profile key resolver follows the active profile", () => {
   let profileName: string | undefined;
-  const resolveProfileKey = createTelegramManualFollowerProfileKeyResolver({
+  const resolveProfileKey = createTelegramFollowerProfileKeyResolver({
     getActiveProfileName: () => profileName,
     manualFollowerOwnerId: "7",
   });
@@ -4347,3 +4347,18 @@ for (const mode of ["normal", "capability", "version", "disabled", "auth", "gene
     }, "follower");
   });
 }
+
+
+test("Forum followers under the same service manager keep distinct stable routing identities", () => {
+ const cinema = createTelegramFollowerProfileKeyResolver({ getActiveProfileName: () => undefined, manualFollowerOwnerId: "819:start:systemd", forumTarget: { chatId: -100123, threadId: 3 } });
+ const health = createTelegramFollowerProfileKeyResolver({ getActiveProfileName: () => undefined, manualFollowerOwnerId: "819:start:systemd", forumTarget: { chatId: -100123, threadId: 359 } });
+ const registry = createTelegramBusFollowerRegistry();
+ registry.register({ instanceId: "cinema", profileKey: cinema(), target: { chatId: -100123, threadId: 3 }, connectedAtMs: 1 });
+ registry.register({ instanceId: "health", profileKey: health(), target: { chatId: -100123, threadId: 359 }, connectedAtMs: 2 });
+ assert.notEqual(cinema(),health()); assert.equal(registry.list().length,2);
+ assert.ok(registry.heartbeat("cinema",3)); assert.ok(registry.heartbeat("health",3));
+ const restarted = createTelegramFollowerProfileKeyResolver({ getActiveProfileName: () => undefined, manualFollowerOwnerId: "999:start:new-manager", forumTarget: { chatId: -100123, threadId: 359 } });
+ assert.equal(restarted(),health());
+ registry.register({instanceId:"health-new",profileKey:restarted(),target:{chatId:-100123,threadId:359},connectedAtMs:4});
+ assert.deepEqual(registry.list().map(row=>row.instanceId),["cinema","health-new"]);
+});

@@ -331,14 +331,17 @@ export interface TelegramBusFollowerRegistrationRuntimeDeps<
   onDisplayTitleChanged?: (ctx: TContext) => void;
 }
 
-export function createTelegramManualFollowerProfileKeyResolver(input: {
+export function createTelegramFollowerProfileKeyResolver(input: {
   getActiveProfileName: () => string | undefined;
   manualFollowerOwnerId: string;
+  forumTarget?: { chatId: number; threadId: number };
 }): () => string {
   return () =>
     Threads.getTelegramThreadOwnerKey({
       kind: "manual-follower",
-      instanceId: input.manualFollowerOwnerId,
+      instanceId: input.forumTarget
+        ? `forum:${input.forumTarget.chatId}:${input.forumTarget.threadId}`
+        : input.manualFollowerOwnerId,
       telegramProfile: input.getActiveProfileName(),
     });
 }

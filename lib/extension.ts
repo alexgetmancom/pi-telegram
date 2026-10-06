@@ -128,9 +128,10 @@ export default function (pi: Pi.ExtensionAPI, options: { forumTarget?: Config.Te
   const getTelegramActiveProfileKey =
     Config.createTelegramActiveProfileKeyGetter(configStore);
   const getTelegramManualFollowerProfileKey =
-    BusFollower.createTelegramManualFollowerProfileKeyResolver({
+    BusFollower.createTelegramFollowerProfileKeyResolver({
       getActiveProfileName: configStore.getActiveProfileName,
       manualFollowerOwnerId: telegramManualFollowerOwnerId,
+      forumTarget: options.forumTarget,
     });
   const telegramBusAuthSecret = Bus.createTelegramBusAuthSecret();
   const telegramBusFollowerControlState =

@@ -2144,3 +2144,13 @@ test("Successful HTTP responses do not reset backoff while durable admission fai
   assert.equal(admissions, 4);
   assert.deepEqual(sleeps, [1_000, 2_000]);
 });
+
+test("empty long poll wakes recovered durable input without changing its cursor", async () => {
+  const controller = new AbortController(); let calls = 0, signals = 0;
+  await runTelegramPollLoop({ ctx: TEST_CONTEXT, signal: controller.signal, config: { botToken: "123:abc" },
+    deleteWebhook: async () => {}, getUpdates: async () => { if (++calls === 1) return []; controller.abort(); throw new DOMException("stop", "AbortError"); },
+    getAcceptedThroughUpdateId: () => 385, getJournalEntryCount: () => 1, signalUpdateWorker: () => { signals++; },
+    appendUpdateBatch: () => { assert.fail("empty poll must not change journal cursor"); }, persistConfig: async () => {}, onErrorStatus: () => {}, onStatusReset: () => {}, sleep: async () => {},
+  });
+  assert.equal(signals, 1);
+});

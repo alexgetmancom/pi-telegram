@@ -1797,6 +1797,8 @@ export async function runTelegramPollLoop<
       const updates = await requestTelegramUpdatesWithinBudget(deps, request);
       reportTelegramPollingResponse(deps, updates.length);
       consecutiveGetUpdatesConflicts = 0;
+      // A recovered journal can contain work even when Telegram has no new updates.
+      if (updates.length === 0 && deps.getJournalEntryCount() > 0) deps.signalUpdateWorker();
       currentUpdateId = updates[0]?.update_id;
       await admitTelegramPollingUpdateBatch({
         updates,

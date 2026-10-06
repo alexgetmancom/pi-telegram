@@ -80,6 +80,13 @@ Local Bot API supports 2000 MB uploads. Shared real paths are sent as file URIs;
 local getFile results are copied only from configured shared roots. Other paths
 use streamed multipart. Before moving a bot from api.telegram.org, stop both Pi
 services and call cloud logOut once, then restart both against the local server.
+Local and cloud endpoints may use different update-ID ranges. Keep the old
+polling journal and segments as a private archive; do not carry its cursor into
+the new endpoint. Seed the new cursor just before the oldest pending local
+update, preserving pending inputs. A missing cursor bootstraps by skipping history,
+so it must not be used when queued user messages need processing. Verify incoming
+requests in both native session histories after both registrations are ready;
+connected health and successful outbound uploads do not prove inbound routing.
 Never keep the same bot logged in at both endpoints. This briefly interrupts
 chat replies; native sessions remain on disk. Reverting to cloud Bot API after
 logOut is subject to Telegram's ten-minute restriction.

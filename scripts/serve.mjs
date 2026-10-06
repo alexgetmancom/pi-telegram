@@ -36,7 +36,7 @@ const runtime = await createAgentSessionRuntime(async ({ cwd, agentDir, sessionM
     cwd, agentDir,
     resourceLoaderOptions: {
       noExtensions: true, noContextFiles: true,
-      appendSystemPrompt: [join(root, "agent", cinemaMode ? "CINEMA.md" : "AGENTS.md")],
+      appendSystemPrompt: [join(root, "skills/telegram-bridge/SKILL.md"), join(root, "agent/TELEGRAM.md"), join(root, "agent", cinemaMode ? "CINEMA.md" : "AGENTS.md")],
       extensionFactories: [pi => telegram(pi, { forumTarget }), pi => {
         pi.on("before_agent_start", event => ({ systemPrompt: event.systemPrompt + "\n<family_preferences>\n" +
           ["alex.md", "maru.md", "watchlist.md"].map(name => `${name}:\n${readFileSync(join(homedir(), ".local/share/family", name), "utf8")}`).join("\n\n") +

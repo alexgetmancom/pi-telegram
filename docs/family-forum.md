@@ -111,9 +111,6 @@ Create `~/.local/share/family/health` (0700) before enabling Health, with privat
 which gives it an independent native session. Individual health facts and plans
 stay in these files; the ordinary nightly reflection does not copy detailed
 health records into general profiles or watchlist. All three sessions keep the
-same tools and Telegram controls; only Cinema runs media tick.
+same tools and Telegram controls. Cinema runs media tick; Health runs its own CLI tick.
 
-The existing Mi Band Bot is currently read-only for this work and for Health.
-Do not invoke its sync/login/token refresh/export or import modules that initialize
-SQLite. No Health CLI has been installed. The initial code/data review and useful
-CLI scope are in [Health CLI migration](./health-cli.md).
+Health now uses the Go CLI `/home/alex/.local/bin/health`. The old Mi Band container is stopped with restart disabled; history remains in its existing SQLite files and CLI credentials live under `~/.config/health`. Do not run both synchronizers. Commands, source limitations and weekly delivery receipts are described in [Health CLI](./health-cli.md).

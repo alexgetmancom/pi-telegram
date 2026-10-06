@@ -6,6 +6,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { startHealthAutomation } from "./health-automation.mjs";
 import { startMediaAutomation } from "./media-automation.mjs";
 import telegram from "../dist/index.js";
 import {
@@ -22,7 +23,7 @@ const role = process.argv[2] ?? "ai";
 const sessions = {
   ai: { cwd: process.cwd(), topic: 16, port: 8186, notes: ["watchlist.md"] },
   cinema: { cwd: join(homedir(), "projects/home/cli-botlix"), topic: 3, port: 8187, instructions: "CINEMA.md", notes: ["watchlist.md"], startAutomation: startMediaAutomation },
-  health: { cwd: join(homedir(), ".local/share/family/health"), topic: 359, port: 8188, instructions: "HEALTH.md", notes: ["health/alex.md", "health/maru.md", "health/notes.md"] },
+  health: { cwd: join(homedir(), ".local/share/family/health"), topic: 359, port: 8188, instructions: "HEALTH.md", notes: ["health/alex.md", "health/maru.md", "health/notes.md"], startAutomation: startHealthAutomation },
 };
 const sessionConfig = Object.hasOwn(sessions, role) ? sessions[role] : undefined;
 if (!sessionConfig || process.argv[3]) throw new Error("Unknown session role: use ai, cinema or health");

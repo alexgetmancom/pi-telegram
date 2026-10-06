@@ -55,7 +55,7 @@ test("Media automation sends a poster, acknowledges only delivery and cleans tem
   assert.equal(existsSync(posterPath), false);
 });
 
-test("family SDK host keeps Health isolated with full tools and only Cinema automation", async () => {
+test("family SDK host keeps Health isolated with full tools and role-specific automation", async () => {
   const source = readFileSync(new URL("../scripts/serve.mjs", import.meta.url), "utf8")
     .replace(/^#!.*\n/u, "")
     .replace(/^import ([\s\S]*?) from "([^"]+)";/gm, (_all, names: string, module: string) => names.trim().startsWith("{")
@@ -64,7 +64,7 @@ test("family SDK host keeps Health isolated with full tools and only Cinema auto
   const expected = [
     { role: undefined, topic: 16, port: 8186, cwd: "/home/alex", agent: undefined, automation: false },
     { role: "cinema", topic: 3, port: 8187, cwd: "/home/alex/projects/home/cli-botlix", agent: "CINEMA.md", automation: true },
-    { role: "health", topic: 359, port: 8188, cwd: "/home/alex/.local/share/family/health", agent: "HEALTH.md", automation: false },
+    { role: "health", topic: 359, port: 8188, cwd: "/home/alex/.local/share/family/health", agent: "HEALTH.md", automation: true },
   ];
   for (const target of expected) {
     const calls: { cwd?: string; topic?: number; port?: number; instructions?: string[]; automation?: boolean; prompt?: string; healthFiles?: string[] } = { healthFiles: [] };
@@ -80,6 +80,7 @@ test("family SDK host keeps Health isolated with full tools and only Cinema auto
         "node:fs": { existsSync: () => true, writeFileSync: () => {}, readFileSync: (path: string) => { calls.healthFiles!.push(path); return "memory"; } },
         "node:path": { dirname: () => "/repo", join: (...parts: string[]) => parts.join("/") },
         "node:os": { homedir: () => "/home/alex" }, "node:url": { fileURLToPath: () => "/repo/scripts/serve.mjs" },
+        "./health-automation.mjs": { startHealthAutomation: () => { calls.automation = true; return () => {}; } },
         "./media-automation.mjs": { startMediaAutomation: () => { calls.automation = true; return () => {}; } },
         "../dist/index.js": { default: (_pi: unknown, config: { forumTarget: { threadId: number } }) => { calls.topic = config.forumTarget.threadId; } },
         "@earendil-works/pi-coding-agent": {
@@ -106,4 +107,14 @@ test("family SDK host keeps Health isolated with full tools and only Cinema auto
     assert.equal(calls.healthFiles?.some(path => path.endsWith("health/alex.md")), target.role === "health");
     assert.equal(calls.healthFiles?.some(path => path.endsWith("watchlist.md")), target.role !== "health");
   }
+});
+
+// @ts-expect-error The deployed SDK host runs native JavaScript.
+import { healthWeeklyKey, healthReportView } from "../scripts/health-automation.mjs";
+test("Health report keeps people separate and missing data unknown; weekly cadence is Moscow time", () => {
+  assert.equal(healthWeeklyKey(new Date("2026-10-11T17:59:00Z")), null);
+  assert.equal(healthWeeklyKey(new Date("2026-10-11T18:00:00Z")), "2026-10-11");
+  assert.equal(healthWeeklyKey(new Date("2026-10-12T18:00:00Z")), null);
+  const view = healthReportView({ alex: { metrics: { steps: { data: [{ average: 1234, observed_days: 2 }] } }, sync: [] }, maru: { metrics: {}, sync: [{ metric: "sleep_details", error: "source failure" }] } });
+  assert.match(view.text, /Алекс[\s\S]*1234/); assert.match(view.text, /Маша[\s\S]*нет данных/); assert.match(view.text, /sleep_details/);
 });

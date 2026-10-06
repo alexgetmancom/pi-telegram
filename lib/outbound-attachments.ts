@@ -599,7 +599,7 @@ export interface TelegramQueuedOutboundAttachmentDeliveryDeps {
     method: string,
     fields: Record<string, string>,
     fileField: string,
-    filePath: string,
+    filePath: string | string[],
     fileName: string,
   ) => Promise<unknown>;
   sendTextReply: (
@@ -977,21 +977,9 @@ export async function sendTelegramOutboundFiles(options: {
     maxAttachmentSizeBytes: options.maxAttachmentSizeBytes,
     statPath: options.statPath,
   });
-  for (const [index, attachment] of pendingAttachments.entries()) {
-    const isPhoto = isTelegramOutboundPhotoAttachmentPath(attachment.path);
-    const method = isPhoto ? "sendPhoto" : "sendDocument";
-    const fieldName = isPhoto ? "photo" : "document";
-    await options.sendMultipart(
-      method,
-      {
-        chat_id: String(chatId),
-        ...(options.caption && index === 0 ? { caption: options.caption } : {}),
-        ...getTelegramMultipartTargetFields(target),
-      },
-      fieldName,
-      attachment.path,
-      attachment.fileName,
-    );
+  for (const batch of attachmentBatches(pendingAttachments)) {
+    const plan = attachmentRequest(batch, { chat_id: String(chatId), ...getTelegramMultipartTargetFields(target) }, options.caption);
+    await options.sendMultipart(plan.method, plan.fields, plan.field, plan.paths, batch[0]!.fileName);
   }
   const added = pendingAttachments.map((attachment) => attachment.path);
   return {
@@ -1024,54 +1012,50 @@ export function createTelegramQueuedOutboundAttachmentSender(
   };
 }
 
+function attachmentBatches(attachments: TelegramQueuedOutboundAttachmentTurnView["queuedAttachments"]): TelegramQueuedOutboundAttachmentTurnView["queuedAttachments"][] {
+  const batches: TelegramQueuedOutboundAttachmentTurnView["queuedAttachments"][] = [];
+  for (const attachment of attachments) {
+    const last = batches.at(-1);
+    if (isTelegramOutboundPhotoAttachmentPath(attachment.path) && last && last.length < 10 && last.every((item) => isTelegramOutboundPhotoAttachmentPath(item.path))) last.push(attachment);
+    else batches.push([attachment]);
+  }
+  return batches;
+}
+
+function attachmentRequest(batch: TelegramQueuedOutboundAttachmentTurnView["queuedAttachments"], fields: Record<string, string>, caption?: string): {
+  method: string; fields: Record<string, string>; field: string; paths: string | string[];
+} {
+  if (batch.length > 1) return { method: "sendMediaGroup", field: "media", paths: batch.map((item) => item.path), fields: { ...fields,
+    media: JSON.stringify(batch.map((_, i) => ({ type: "photo", media: `attach://${i === 0 ? "media" : `media${i}`}`, ...(i === 0 && caption ? { caption } : {}) }))) } };
+  const attachment = batch[0]!;
+  const kind = isTelegramOutboundPhotoAttachmentPath(attachment.path) ? "photo" : /\.mp4$/iu.test(attachment.path) ? "video" : "document";
+  return { method: kind === "photo" ? "sendPhoto" : kind === "video" ? "sendVideo" : "sendDocument", field: kind, paths: attachment.path,
+    fields: { ...fields, ...(caption ? { caption } : {}), ...(kind === "video" ? { supports_streaming: "true" } : {}) } };
+}
+
 export async function sendQueuedTelegramOutboundAttachments(
   turn: TelegramQueuedOutboundAttachmentTurnView,
   deps: TelegramQueuedOutboundAttachmentDeliveryDeps,
 ): Promise<void> {
-  for (const attachment of turn.queuedAttachments) {
+  for (const batch of attachmentBatches(turn.queuedAttachments)) {
     if (deps.isDeliveryActive?.() === false) return;
     try {
-      if (deps.maxAttachmentSizeBytes !== undefined) {
-        const stats = await (deps.statPath ?? stat)(attachment.path);
-        if (deps.isDeliveryActive?.() === false) return;
-        if (stats.size > deps.maxAttachmentSizeBytes) {
-          throw new Error(
-            formatTelegramOutboundAttachmentSizeLimitError(
-              stats.size,
-              deps.maxAttachmentSizeBytes,
-            ),
-          );
+      for (const attachment of batch) {
+        if (deps.maxAttachmentSizeBytes !== undefined) {
+          const stats = await (deps.statPath ?? stat)(attachment.path);
+          if (stats.size > deps.maxAttachmentSizeBytes) throw new Error(formatTelegramOutboundAttachmentSizeLimitError(stats.size, deps.maxAttachmentSizeBytes));
         }
       }
-      const isPhoto = isTelegramOutboundPhotoAttachmentPath(attachment.path);
-      const method = isPhoto ? "sendPhoto" : "sendDocument";
-      const fieldName = isPhoto ? "photo" : "document";
-      await withTelegramReplyParameters(
-        turn.chatId, turn.replyToMessageId, turn.target,
-        (replyParameters) => deps.sendMultipart(
-          method,
-          {
-            chat_id: String(turn.chatId),
-            ...(replyParameters ? { reply_parameters: JSON.stringify(replyParameters) } : {}),
-            ...getTelegramMultipartTargetFields(turn.target),
-          },
-          fieldName,
-          attachment.path,
-          attachment.fileName,
-        ),
-      );
+      if (deps.isDeliveryActive?.() === false) return;
+      await withTelegramReplyParameters(turn.chatId, turn.replyToMessageId, turn.target, (replyParameters) => {
+        const plan = attachmentRequest(batch, { chat_id: String(turn.chatId), ...(replyParameters ? { reply_parameters: JSON.stringify(replyParameters) } : {}), ...getTelegramMultipartTargetFields(turn.target) });
+        return deps.sendMultipart(plan.method, plan.fields, plan.field, plan.paths, batch[0]!.fileName);
+      });
     } catch (error) {
       if (deps.isDeliveryActive?.() === false) return;
+      deps.recordRuntimeEvent?.("attachment", error, { fileName: batch[0]!.fileName });
       const message = error instanceof Error ? error.message : String(error);
-      deps.recordRuntimeEvent?.("attachment", error, {
-        fileName: attachment.fileName,
-      });
-      await deps.sendTextReply(
-        turn.chatId,
-        turn.replyToMessageId,
-        `Failed to send attachment ${attachment.fileName}: ${message}`,
-        { target: turn.target },
-      );
+      await deps.sendTextReply(turn.chatId, turn.replyToMessageId, `Failed to send attachment ${batch[0]!.fileName}: ${message}`, { target: turn.target });
     }
   }
 }

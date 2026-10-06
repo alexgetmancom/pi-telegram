@@ -128,7 +128,7 @@ export type TelegramGuestCachedAttachmentResult = {
 export declare function registerTelegramOutboundAttachmentTool(pi: ExtensionAPI, deps: TelegramOutboundAttachmentToolRegistrationDeps): void;
 export declare function registerTelegramOutboundMessageTool(pi: ExtensionAPI, deps: TelegramOutboundMessageToolRegistrationDeps): void;
 export interface TelegramQueuedOutboundAttachmentDeliveryDeps {
-    sendMultipart: (method: string, fields: Record<string, string>, fileField: string, filePath: string, fileName: string) => Promise<unknown>;
+    sendMultipart: (method: string, fields: Record<string, string>, fileField: string, filePath: string | string[], fileName: string) => Promise<unknown>;
     sendTextReply: (chatId: number, replyToMessageId: number, text: string, options?: {
         target?: TelegramTarget;
     }) => Promise<unknown>;

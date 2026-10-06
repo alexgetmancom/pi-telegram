@@ -7,13 +7,29 @@
  */
 import { randomUUID } from "node:crypto";
 import { createWriteStream, openAsBlob } from "node:fs";
-import { mkdir, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { request as requestHttps } from "node:https";
-import { join } from "node:path";
+import { request as requestHttp } from "node:http";
+import { basename, delimiter, isAbsolute, join, relative } from "node:path";
 import { resolveTelegramAttachmentsDir } from "./paths.js";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-const TELEGRAM_API_BASE = "https://api.telegram.org";
+function telegramApiBase() {
+    const base = process.env.PI_TELEGRAM_API_BASE?.trim() || "https://api.telegram.org";
+    const url = new URL(base);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash)
+        throw new Error("Invalid PI_TELEGRAM_API_BASE");
+    return base.replace(/\/$/u, "");
+}
+async function sharedTelegramFile(path) {
+    const actual = await realpath(path);
+    for (const root of (process.env.PI_TELEGRAM_LOCAL_FILE_ROOTS || "").split(delimiter).filter(Boolean)) {
+        const rel = relative(await realpath(root), actual);
+        if (rel && !rel.startsWith("..") && !isAbsolute(rel))
+            return actual;
+    }
+    return undefined;
+}
 export const TELEGRAM_FILE_MAX_BYTES = 50 * 1024 * 1024;
 export function getTelegramInboundFileByteLimitFromEnv(env, names, defaultValue = TELEGRAM_FILE_MAX_BYTES) {
     for (const name of names) {
@@ -499,27 +515,16 @@ function getTelegramRequestBodyBuffer(body) {
         return Buffer.from(body);
     throw new Error("Unsupported Telegram HTTPS request body");
 }
-async function buildTelegramMultipartBody(fields, fileField, fileBlob, fileName) {
-    const boundary = `pi-telegram-${randomUUID()}`;
-    const chunks = [];
-    for (const [key, value] of Object.entries(fields)) {
-        chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`));
-    }
-    chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${fileField}"; filename="${fileName}"\r\nContent-Type: ${fileBlob.type || "application/octet-stream"}\r\n\r\n`), Buffer.from(await fileBlob.arrayBuffer()), Buffer.from(`\r\n--${boundary}--\r\n`));
-    return {
-        body: Buffer.concat(chunks),
-        contentType: `multipart/form-data; boundary=${boundary}`,
-    };
-}
 async function telegramHttpsFetch(input, init, family) {
     const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
-    const body = getTelegramRequestBodyBuffer(init.body);
-    const headers = new Headers(init.headers);
+    const formRequest = init.body instanceof FormData ? new Request(url, init) : undefined;
+    const body = formRequest ? undefined : getTelegramRequestBodyBuffer(init.body);
+    const headers = new Headers(formRequest?.headers ?? init.headers);
     if (body && !headers.has("content-length")) {
         headers.set("content-length", String(body.byteLength));
     }
     return new Promise((resolve, reject) => {
-        const req = requestHttps(url, {
+        const req = (url.protocol === "http:" ? requestHttp : requestHttps)(url, {
             method: init.method ?? "GET",
             family,
             headers: Object.fromEntries(headers.entries()),
@@ -545,7 +550,14 @@ async function telegramHttpsFetch(input, init, family) {
                 init.signal.addEventListener("abort", () => req.destroy(new DOMException("Aborted", "AbortError")), { once: true });
             }
         }
-        req.end(body);
+        if (formRequest?.body) {
+            const stream = Readable.fromWeb(formRequest.body);
+            stream.on("error", (error) => req.destroy(error));
+            req.on("error", () => stream.destroy());
+            stream.pipe(req);
+        }
+        else
+            req.end(body);
     });
 }
 let telegramHttpsFetchForTesting;
@@ -734,7 +746,7 @@ function assertTelegramBotTokenConfigured(botToken) {
 export async function callTelegram(botToken, method, body, options) {
     const configuredBotToken = assertTelegramBotTokenConfigured(botToken);
     try {
-        return await callTelegramWithRetry(method, async (family) => telegramFetch(`${TELEGRAM_API_BASE}/bot${configuredBotToken}/${method}`, {
+        return await callTelegramWithRetry(method, async (family) => telegramFetch(`${telegramApiBase()}/bot${configuredBotToken}/${method}`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
@@ -747,7 +759,7 @@ export async function callTelegram(botToken, method, body, options) {
     }
 }
 export async function fetchTelegramBotIdentity(botToken, fetchImpl = fetch) {
-    const url = `${TELEGRAM_API_BASE}/bot${botToken}/getMe`;
+    const url = `${telegramApiBase()}/bot${botToken}/getMe`;
     const response = await callTelegramTransportRequest((family) => fetchImpl === fetch ? telegramFetch(url, {}, family) : fetchImpl(url));
     return response.json();
 }
@@ -759,28 +771,43 @@ export async function fetchTelegramBotIdentity(botToken, fetchImpl = fetch) {
  */
 export async function callTelegramMultipart(botToken, method, fields, fileField, filePath, fileName, options) {
     const configuredBotToken = assertTelegramBotTokenConfigured(botToken);
-    const fileBlob = await openAsBlob(filePath);
+    const paths = typeof filePath === "string" ? [filePath] : filePath;
+    if (paths.length < 1 || paths.length > 10)
+        throw new Error("Multipart requires 1..10 files");
+    const names = paths.map((_, i) => i === 0 ? fileField : `${fileField}${i}`);
+    const shared = await Promise.all(paths.map((path) => process.env.PI_TELEGRAM_LOCAL_FILE_ROOTS ? sharedTelegramFile(path) : undefined));
+    if (shared.every((path) => path !== undefined)) {
+        const body = { ...fields };
+        const localMedia = (value) => {
+            if (typeof value === "string") {
+                const index = names.findIndex((name) => value === `attach://${name}`);
+                return index >= 0 ? `file://${shared[index]}` : value;
+            }
+            if (Array.isArray(value))
+                return value.map(localMedia);
+            if (value && typeof value === "object")
+                return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, localMedia(item)]));
+            return value;
+        };
+        for (const key of ["media", "reply_parameters", "reply_markup", "rich_message"]) {
+            if (typeof body[key] === "string")
+                body[key] = localMedia(JSON.parse(body[key]));
+        }
+        if (!body.media && !body.rich_message)
+            body[fileField] = `file://${shared[0]}`;
+        if (body.supports_streaming === "true")
+            body.supports_streaming = true;
+        return callTelegram(configuredBotToken, method, body, options);
+    }
+    const blobs = await Promise.all(paths.map((path) => openAsBlob(path)));
     try {
         return await callTelegramWithRetry(method, async (family) => {
-            if (family) {
-                const multipart = await buildTelegramMultipartBody(fields, fileField, fileBlob, fileName);
-                return telegramFetch(`${TELEGRAM_API_BASE}/bot${configuredBotToken}/${method}`, {
-                    method: "POST",
-                    headers: { "content-type": multipart.contentType },
-                    body: multipart.body,
-                    signal: options?.signal,
-                }, family);
-            }
             const form = new FormData();
-            for (const [key, value] of Object.entries(fields)) {
+            for (const [key, value] of Object.entries(fields))
                 form.set(key, value);
-            }
-            form.set(fileField, fileBlob, fileName);
-            return telegramFetch(`${TELEGRAM_API_BASE}/bot${configuredBotToken}/${method}`, {
-                method: "POST",
-                body: form,
-                signal: options?.signal,
-            });
+            for (const [i, blob] of blobs.entries())
+                form.set(names[i], blob, i === 0 ? fileName : basename(paths[i]));
+            return telegramFetch(`${telegramApiBase()}/bot${configuredBotToken}/${method}`, { method: "POST", body: form, signal: options?.signal }, family);
         }, options);
     }
     catch (error) {
@@ -796,7 +823,25 @@ export async function downloadTelegramFile(botToken, fileId, suggestedName, temp
     // Names carry scope and message id, so the same message maps to the same path; publish by rename.
     const targetPath = join(tempDir, sanitizeFileName(suggestedName));
     const partPath = `${targetPath}.${randomUUID()}.part`;
-    const response = await callTelegramTransportRequest((family) => telegramFetch(`${TELEGRAM_API_BASE}/file/bot${configuredBotToken}/${file.file_path}`, { signal: options?.signal }, family));
+    if (isAbsolute(file.file_path)) {
+        const source = await sharedTelegramFile(file.file_path);
+        if (!source)
+            throw new Error("Local Bot API file is outside shared roots");
+        const info = await stat(source);
+        assertTelegramFileSizeWithinLimit(info.size, options?.maxFileSizeBytes);
+        try {
+            throwIfTelegramApiCallAborted(options?.signal);
+            await copyFile(source, partPath);
+            throwIfTelegramApiCallAborted(options?.signal);
+            await publishTelegramDownload(partPath, targetPath, options?.signal);
+            return targetPath;
+        }
+        catch (error) {
+            await removeTelegramPartialDownload(partPath);
+            throw error;
+        }
+    }
+    const response = await callTelegramTransportRequest((family) => telegramFetch(`${telegramApiBase()}/file/bot${configuredBotToken}/${file.file_path}`, { signal: options?.signal }, family));
     if (!response.ok) {
         throw new Error(`Failed to download Telegram file: ${response.status}`);
     }

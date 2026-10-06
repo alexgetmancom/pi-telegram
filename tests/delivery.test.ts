@@ -776,7 +776,7 @@ test("Bridge photo uses existing multipart transport with exact topic and owners
     generation: "photo", getTargetPolicyView: () => ({ canDeliver: true, ownsDirect: true, allowedChatId: 42, leaderTarget: target }),
     getActiveTurnTarget: () => target, isTransportActive: () => active,
     api: { async sendMessage() { throw new Error("unexpected text send"); }, async editMessageText() { throw new Error("unexpected edit"); }, async deleteMessage() {}, async sendChatAction() { return true; } },
-    photoApi: { async callMultipart<T>(method: string, fields: Record<string, string>, fileField: string, path: string) {
+    photoApi: { async callMultipart<T>(method: string, fields: Record<string, string>, fileField: string, path: string | string[]) {
       calls.push({ method, fields, fileField, path }); return { message_id: 901 } as T;
     } }, recordOwnership: input => { ownership.push(input); },
   });

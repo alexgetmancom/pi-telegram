@@ -128,7 +128,7 @@ export interface TelegramVoiceReplySenderDeps {
     method: string,
     fields: Record<string, string>,
     fileField: string,
-    filePath: string,
+    filePath: string | string[],
     fileName: string,
   ) => Promise<unknown>;
   sendTextReply?: (

@@ -536,6 +536,7 @@ export function isTelegramFollowerApiCallAllowed(input: {
   ]);
   const allowedMultipartMethods = new Set([
     "sendAudio",
+    "sendVideo",
     "sendDocument",
     "sendMediaGroup",
     "sendPhoto",

@@ -2913,3 +2913,11 @@ test("Bus follower registry returns defensive copies", () => {
     threadId: 2,
   });
 });
+
+test("follower video and photo album keep the exact forum target", () => {
+  const follower = { target: { chatId: -100, threadId: 3 } } as Parameters<typeof isTelegramFollowerApiCallAllowed>[0]["follower"];
+  for (const method of ["sendVideo", "sendMediaGroup"]) {
+    assert.equal(isTelegramFollowerApiCallAllowed({ follower, method: "callMultipart", args: [method, { chat_id: "-100", message_thread_id: "3" }, "media", ["/tmp/a.jpg", "/tmp/b.jpg"], "a.jpg"] }), true);
+    assert.equal(isTelegramFollowerApiCallAllowed({ follower, method: "callMultipart", args: [method, { chat_id: "-100", message_thread_id: "16" }, "media", ["/tmp/a.jpg", "/tmp/b.jpg"], "a.jpg"] }), false);
+  }
+});

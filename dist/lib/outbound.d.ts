@@ -48,7 +48,7 @@ export interface TelegramVoiceReplyTurnView {
 }
 export interface TelegramVoiceReplySenderDeps {
     execCommand: (command: string, args: string[], options?: TelegramVoiceExecOptions) => Promise<TelegramVoiceExecResult>;
-    sendMultipart: (method: string, fields: Record<string, string>, fileField: string, filePath: string, fileName: string) => Promise<unknown>;
+    sendMultipart: (method: string, fields: Record<string, string>, fileField: string, filePath: string | string[], fileName: string) => Promise<unknown>;
     sendTextReply?: (chatId: number, replyToMessageId: number | undefined, text: string, options?: {
         parseMode?: "HTML";
     }) => Promise<unknown>;

@@ -343,7 +343,7 @@ export interface TelegramAnswerCallbackQueryOptions {
 }
 export interface TelegramApiClient {
     call: <TResponse>(method: string, body: Record<string, unknown>, options?: TelegramApiCallOptions) => Promise<TResponse>;
-    callMultipart: <TResponse>(method: string, fields: Record<string, string>, fileField: string, filePath: string, fileName: string, options?: TelegramApiCallOptions) => Promise<TResponse>;
+    callMultipart: <TResponse>(method: string, fields: Record<string, string>, fileField: string, filePath: string | string[], fileName: string, options?: TelegramApiCallOptions) => Promise<TResponse>;
     downloadFile: (fileId: string, suggestedName: string, tempDir: string, options?: TelegramFileDownloadOptions) => Promise<string>;
     answerCallbackQuery: (callbackQueryId: string, text?: string) => Promise<void>;
     answerGuestQuery?: (guestQueryId: string, text?: string, options?: TelegramAnswerGuestQueryOptions) => Promise<void>;
@@ -424,7 +424,7 @@ export interface TelegramBridgeApiRuntimeDeps {
 }
 export interface TelegramBridgeApiRuntime {
     call: <TResponse>(method: string, body: Record<string, unknown>, options?: TelegramApiCallOptions) => Promise<TResponse>;
-    callMultipart: <TResponse>(method: string, fields: Record<string, string>, fileField: string, filePath: string, fileName: string, options?: TelegramApiCallOptions) => Promise<TResponse>;
+    callMultipart: <TResponse>(method: string, fields: Record<string, string>, fileField: string, filePath: string | string[], fileName: string, options?: TelegramApiCallOptions) => Promise<TResponse>;
     downloadFile: (fileId: string, suggestedName: string, source?: TelegramAttachmentSource) => Promise<string>;
     deleteWebhook: (signal?: AbortSignal) => Promise<boolean>;
     getUpdates: (body: Record<string, unknown>, signal?: AbortSignal) => Promise<TelegramUpdate[]>;
@@ -512,7 +512,7 @@ export declare function fetchTelegramBotIdentity(botToken: string, fetchImpl?: t
  * documents, animations, etc. It handles FormData construction, retry logic
  * (via callTelegramWithRetry), and error recording under the "multipart" category.
  */
-export declare function callTelegramMultipart<TResponse>(botToken: string | undefined, method: string, fields: Record<string, string>, fileField: string, filePath: string, fileName: string, options?: TelegramApiCallOptions): Promise<TResponse>;
+export declare function callTelegramMultipart<TResponse>(botToken: string | undefined, method: string, fields: Record<string, string>, fileField: string, filePath: string | string[], fileName: string, options?: TelegramApiCallOptions): Promise<TResponse>;
 export declare function downloadTelegramFile(botToken: string | undefined, fileId: string, suggestedName: string, tempDir: string, options?: TelegramFileDownloadOptions): Promise<string>;
 /** Tooltip-like callback answers omit a terminal sentence period; ellipses and other punctuation stay literal. */
 export declare function formatTelegramCallbackAnswerText(text: string | undefined): string | undefined;

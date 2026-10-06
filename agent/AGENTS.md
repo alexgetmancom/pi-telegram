@@ -16,6 +16,18 @@ Keep personal facts in these files, not in this AGENTS.md or Git. Explicit “re
 
 For an unexpectedly inaccessible site, update its domain entry in `network-issues.md`: date, vantage point (usually VM 106), exact observed symptom/error, available alternative, and status. A timeout is not proof of a Russian block; record an unknown cause until verified. Strip secrets and signed URL parameters. Avoid repeated long retries on known failures. No VPN, firewall or routing changes are authorized by a journal entry; future fixes require a family request.
 
+## Media tools shared by both topics
+
+Use `/home/alex/.local/bin/botflix` through bash; consult help for exact arguments. Jellyfin viewing and statistics belong to the shared `root` account. Keep individual tastes in alex.md and maru.md, not separate playback profiles.
+
+For candidate metadata use `catalog --year YEAR --type tv|movie TITLE`, then exact `tv/ID` or `movie/ID` for `poster` and `trailers`. TMDB supplies the metadata and artwork; credit it when showing those results. Use the year to distinguish remakes. Prefer Russian trailers for joint viewing; disclose when only another language is available. Never label a trailer official unless the source identifies it as such.
+
+Use `woke --year YEAR --type tv|movie [--season N] ORIGINAL_TITLE` for published Wokeometer and Is It Woke or Not scores. Check title_match, year_verified, season, source errors and URLs. Scores above 5/10 or 50% require a short attributed warning only. Exactly 5/10 or 50% does not exceed the threshold. Never exclude a recommendation, hide a candidate, refuse a requested download or change subscriptions because of these scores. Do not average the sources. Missing or failed ratings mean unknown, not zero; do not invent a score. Current requests supersede older profile thresholds. Explicit dislike of a particular title remains a personal preference, independent of its score.
+
+For a requested URL, `video URL` downloads and prepares a Telegram-compatible MP4, returns the verified path and does not send Telegram messages itself. Optional `--output FILE` must precede the URL and cannot overwrite an existing file. Use telegram_attach with that path during the active turn; MP4 is delivered as video. Multiple photos in one telegram_attach call are delivered as an album (2–10 photos). For a shortlist show posters; get one trailer after a title is selected or explicitly requested. Do not automatically download videos merely because they appeared in search. CLI errors and partial results must be inspected before asserting success.
+
+The local Telegram Bot API runs on VM106 at `http://127.0.0.1:8081`, supporting uploads up to 2000 MB. Pi owns Telegram polling and delivery for both topics. Generated media lives on disk under `~/.local/share/botflix/attachments`, outside the Jellyfin library. Never issue raw Telegram calls or create new downloader/poster/rating scripts for these existing CLI capabilities. Keep credentials and signed links out of replies, logs and Git.
+
 ## Topics
 
 The AI topic is the general family assistant with host tools. The Cinema topic has its own history and the same full host and Telegram tools, using the botflix CLI through bash for media. These three preference files are shared; conversation histories are not automatically shared between topics.
@@ -23,7 +35,7 @@ The AI topic is the general family assistant with host tools. The Cinema topic h
 ## Host and services
 
 - This is VM 106, not the Proxmox host. Start with local inspection. Other hosts require an explicit request from the family.
-- Botflix runs as Docker container `botflix-media`; its Compose project lives under `/opt/agent-command-router`. Inspect its labels and mounts before changing source or rebuilding.
+- The old Telegram BotFlix runs as Docker container `botflix-media`; its Compose project lives under `/opt/agent-command-router`. Inspect its labels and mounts before changing source or rebuilding.
 - qBittorrent Web API is at `http://127.0.0.1:8080`, Jellyfin at `http://127.0.0.1:8096`. Their Compose file is `/opt/media-stack/compose.yaml`; media lives in `/data/media`.
 - Prefer authenticated service APIs for torrent ordering, completion status and library metadata. File modification dates are not proof of the most recent download. Check the result before asserting success.
 - The Cinema topic uses the separate Go BotFlix CLI at `/home/alex/.local/bin/botflix`. Diagnose or repair it here only when asked. Family viewing uses the single Jellyfin root account. CLI help documents continue/next, torrent preparation and file selection, direct qBittorrent API access and merged viewing statistics. The From subscription now belongs to the CLI; the old Telegram BotFlix otherwise continues independently.

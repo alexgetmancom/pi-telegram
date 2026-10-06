@@ -22,7 +22,7 @@ export interface TelegramVoiceReplySenderDeps {
         code: number;
         killed: boolean;
     }>;
-    sendMultipart: (method: string, fields: Record<string, string>, fileField: string, filePath: string, fileName: string) => Promise<unknown>;
+    sendMultipart: (method: string, fields: Record<string, string>, fileField: string, filePath: string | string[], fileName: string) => Promise<unknown>;
     sendChatAction?: (chatId: number, action: string) => Promise<unknown>;
     sendRecordVoiceAction?: (chatId: number) => Promise<unknown>;
     isDeliveryActive?: () => boolean;

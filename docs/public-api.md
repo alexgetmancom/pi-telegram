@@ -600,3 +600,18 @@ The following are not stable public contracts unless explicitly documented elsew
 - test support functions
 
 They are intentionally not exposed through a `./lib/*.ts` export wildcard in `0.12.0`.
+
+### Local Bot API and attachment albums
+
+`PI_TELEGRAM_API_BASE` selects the single API endpoint for identity, polling,
+messages and files (default https://api.telegram.org).
+`PI_TELEGRAM_LOCAL_FILE_ROOTS` is a platform-delimited list of shared absolute
+roots: real paths within them may use local Bot API file URIs; absolute getFile
+paths outside them are rejected. Configure both only for a trusted local Bot API
+service. The family deployment documents the 2000 MB limits and endpoint switch.
+
+The multipart API accepts a path or up to ten paths; the first upload field keeps
+its name, later fields append their index. telegram_attach groups consecutive
+photos into sendMediaGroup albums, preserving target/reply/caption, and MP4
+uses sendVideo with supports_streaming. Unknown delivery outcomes do not trigger
+a duplicate individual resend. Guest replies retain their one-file contract.

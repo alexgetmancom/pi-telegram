@@ -57,3 +57,40 @@ Reflection can update only `alex.md`, `maru.md` and `watchlist.md`; it cannot re
 For a live test, run `node scripts/reflect.mjs --date YYYY-MM-DD` with the service environment loaded. An unfinished day is marked partial and will be reviewed again by the scheduled run. `--inspect` lists the selected source entries without calling the model or changing memory. After setup, check `systemctl --user list-timers pi-telegram-reflection.timer`.
 
 To update, pull `main`, run `npm ci` and `npm run build`, then `systemctl --user restart pi-telegram pi-telegram-cinema`. Keep this as the deployment path; GitHub Actions validates the fork.
+
+## Local Bot API and family media
+
+On VM106 use `scripts/local-bot-api.compose.yaml` as the Docker Compose source,
+installed at `~/.config/telegram-bot-api/compose.yaml`. Its private `secrets.env`
+contains TELEGRAM_API_ID and TELEGRAM_API_HASH (0600, outside Git). The service
+runs as uid/gid 1000, listens only at 127.0.0.1:8081 and shares the same absolute
+on-disk paths for Bot API data and generated attachments. Do not expose its port
+or print/list bot-token-named data directories.
+
+Both Pi services read these additions from their existing private EnvironmentFile:
+
+```sh
+PI_TELEGRAM_API_BASE=http://127.0.0.1:8081
+PI_TELEGRAM_LOCAL_FILE_ROOTS=/home/alex/.local/share/telegram-bot-api:/home/alex/.local/share/botflix/attachments:/home/alex/.pi/agent/tmp/pi-telegram/attachments
+PI_TELEGRAM_OUTBOUND_ATTACHMENT_MAX_BYTES=2000000000
+PI_TELEGRAM_INBOUND_FILE_MAX_BYTES=2000000000
+```
+
+Local Bot API supports 2000 MB uploads. Shared real paths are sent as file URIs;
+local getFile results are copied only from configured shared roots. Other paths
+use streamed multipart. Before moving a bot from api.telegram.org, stop both Pi
+services and call cloud logOut once, then restart both against the local server.
+Never keep the same bot logged in at both endpoints. This briefly interrupts
+chat replies; native sessions remain on disk. Reverting to cloud Bot API after
+logOut is subject to Telegram's ten-minute restriction.
+
+`telegram_attach` batches consecutive photos into albums of 2–10, keeps the exact
+forum target and reply, and sends MP4 through sendVideo. An uncertain album
+result is not retried as individual uploads. One photo or a document stays one
+attachment. Both direct and follower delivery use the same path.
+
+BotFlix CLI supplies catalog, exact-ID poster/trailers, advisory woke checks and
+video download/preparation. Telegram delivery remains in Pi. General AGENTS.md
+loads in both topics; CINEMA.md adds only the cinema workflow. Family Markdown
+files contain tastes and viewing facts, not credentials or a second ratings
+cache. Site scores may warn but never filter recommendations or downloads.

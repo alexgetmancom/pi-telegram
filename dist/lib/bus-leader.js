@@ -2242,6 +2242,7 @@ function recordFollowerApiMessageOwnership(input) {
     if (apiMethod !== "sendMessage" &&
         apiMethod !== "sendRichMessage" &&
         apiMethod !== "sendPhoto" &&
+        apiMethod !== "sendVideo" &&
         apiMethod !== "sendDocument" &&
         apiMethod !== "sendVoice" &&
         apiMethod !== "sendMediaGroup") {

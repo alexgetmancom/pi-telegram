@@ -220,7 +220,7 @@ export interface TelegramBusLeaderApiProxyDeps {
     method: string,
     fields: Record<string, string>,
     fieldName: string,
-    filePath: string,
+    filePath: string | string[],
     fileName: string,
     options?: TelegramApiCallOptions,
   ) => Promise<unknown>;
@@ -2038,7 +2038,7 @@ export function createTelegramBusLeaderApiProxy(
           args[0] as string,
           fields,
           args[2] as string,
-          args[3] as string,
+          args[3] as string | string[],
           args[4] as string,
           args[5] as TelegramApiCallOptions | undefined,
         );
@@ -3070,6 +3070,7 @@ function recordFollowerApiMessageOwnership(input: {
     apiMethod !== "sendMessage" &&
     apiMethod !== "sendRichMessage" &&
     apiMethod !== "sendPhoto" &&
+    apiMethod !== "sendVideo" &&
     apiMethod !== "sendDocument" &&
     apiMethod !== "sendVoice" &&
     apiMethod !== "sendMediaGroup"

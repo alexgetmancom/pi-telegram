@@ -1,6 +1,6 @@
 # pi-telegram
 
-This fork adds one shared family forum topic: every human participant can use the same Pi session and controls. See [family forum deployment](./docs/family-forum.md) for the systemd setup. Conversation, queue, models and compaction are native Pi.
+This fork adds one shared family forum topic: every human participant can use the same Pi session and controls. See [family forum deployment](./docs/family-forum.md) for the systemd setup. Conversation, queue, models and compaction are native Pi. Family media uses the local Bot API for uploads up to 2000 MB, photo albums and MP4 video; BotFlix CLI prepares the files.
 
 ![pi-telegram screenshot](screenshot.png)
 

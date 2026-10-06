@@ -1081,7 +1081,7 @@ export function registerTelegramLifecycleRuntimeHooks({
               guestQueryId: turn.guestQueryId!,
               stagingChatId,
               stagingTarget,
-              attachment: { path: filePath, fileName },
+              attachment: { path: typeof filePath === "string" ? filePath : (() => { throw new Error("Guest voice requires one file"); })(), fileName },
               caption,
               sendMultipart: callMultipart,
               answerGuestQuery: (guestQueryId, result) =>

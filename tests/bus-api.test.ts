@@ -117,7 +117,7 @@ function createDirectRuntime(calls: unknown[]): TelegramBridgeApiRuntime {
       method: string,
       fields: Record<string, string>,
       fileField: string,
-      filePath: string,
+      filePath: string | string[],
       fileName: string,
     ) => {
       calls.push({

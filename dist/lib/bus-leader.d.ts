@@ -102,7 +102,7 @@ export interface TelegramBusFollowerDisconnectHandlerDeps {
 }
 export interface TelegramBusLeaderApiProxyDeps {
     call: (method: string, body: Record<string, unknown>, options?: TelegramApiCallOptions) => Promise<unknown>;
-    callMultipart: (method: string, fields: Record<string, string>, fieldName: string, filePath: string, fileName: string, options?: TelegramApiCallOptions) => Promise<unknown>;
+    callMultipart: (method: string, fields: Record<string, string>, fieldName: string, filePath: string | string[], fileName: string, options?: TelegramApiCallOptions) => Promise<unknown>;
     downloadFile: (fileId: string, suggestedName: string, source?: TelegramAttachmentSource) => Promise<unknown>;
     recoverStaleTargetError?: (apiBody: unknown, error: unknown) => Promise<unknown> | unknown;
 }

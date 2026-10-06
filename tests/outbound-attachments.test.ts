@@ -1249,3 +1249,25 @@ test("Outbound attachment sender runtime applies the default outbound size limit
     `Failed to send attachment a.png: Attachment exceeds size limit (${TELEGRAM_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES + 1} bytes > ${TELEGRAM_OUTBOUND_ATTACHMENT_DEFAULT_MAX_BYTES} bytes)`,
   ]);
 });
+
+test("queued photos form one album with exact forum reply target; MP4 uses video", async () => {
+  const calls: Array<{ method: string; fields: Record<string, string>; paths: string | string[] }> = [];
+  await sendQueuedTelegramOutboundAttachments({ chatId: -100, replyToMessageId: 7, target: { chatId: -100, threadId: 3 }, queuedAttachments: [
+    { path: "/tmp/a.jpg", fileName: "a.jpg" }, { path: "/tmp/b.png", fileName: "b.png" }, { path: "/tmp/c.mp4", fileName: "c.mp4" },
+  ] }, { sendMultipart: async (method, fields, _field, paths) => { calls.push({ method, fields, paths }); }, sendTextReply: async () => {}, statPath: async () => ({ size: 10 }), maxAttachmentSizeBytes: 2000_000_000 });
+  assert.deepEqual(calls.map((call) => call.method), ["sendMediaGroup", "sendVideo"]);
+  assert.deepEqual(calls[0]?.paths, ["/tmp/a.jpg", "/tmp/b.png"]);
+  assert.equal(calls[0]?.fields.message_thread_id, "3");
+  assert.equal(JSON.parse(calls[0]!.fields.reply_parameters!).message_id, 7);
+  assert.deepEqual(JSON.parse(calls[0]!.fields.media!), [{ type: "photo", media: "attach://media" }, { type: "photo", media: "attach://media1" }]);
+  assert.equal(calls[1]?.fields.supports_streaming, "true");
+});
+
+test("uncertain album delivery is reported once without individual resend", async () => {
+  let uploads = 0, failures = 0;
+  await sendQueuedTelegramOutboundAttachments(createAttachmentTurn([{ path: "/tmp/a.jpg", fileName: "a.jpg" }, { path: "/tmp/b.jpg", fileName: "b.jpg" }]), {
+    sendMultipart: async () => { uploads++; throw new TelegramApiCommitUnknownError("sendMediaGroup", new Error("connection lost")); },
+    sendTextReply: async () => { failures++; },
+  });
+  assert.equal(uploads, 1); assert.equal(failures, 1);
+});

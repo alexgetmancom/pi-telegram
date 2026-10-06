@@ -2211,7 +2211,7 @@ test("Telegram bridge API runtime exposes typed Bot API helpers", async () => {
         method: string,
         fields: Record<string, string>,
         fileField: string,
-        filePath: string,
+        filePath: string | string[],
         fileName: string,
       ) => {
         calls.push({
@@ -2487,5 +2487,31 @@ test("Telegram API client resolves bot tokens lazily for wrapped calls", async (
     assert.match(calls[1] ?? "", /bot456:def\/answerCallbackQuery$/);
   } finally {
     restoreFetch();
+  }
+});
+
+test("local Bot API sends album paths as JSON and copies local getFile without network download", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "local-bot-api-"));
+  const a = join(dir, "a.jpg"), b = join(dir, "b.jpg");
+  await writeFile(a, "first"); await writeFile(b, "second");
+  const priorBase = process.env.PI_TELEGRAM_API_BASE, priorRoots = process.env.PI_TELEGRAM_LOCAL_FILE_ROOTS;
+  process.env.PI_TELEGRAM_API_BASE = "http://127.0.0.1:8081";
+  process.env.PI_TELEGRAM_LOCAL_FILE_ROOTS = dir;
+  const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const restore = setApiTestFetch(async (input, init) => {
+    const url = String(input), body = JSON.parse(String(init?.body)); calls.push({ url, body });
+    return createApiJsonResponse(url.endsWith("getFile") ? { file_path: a, file_size: 5 } : [{ message_id: 1 }, { message_id: 2 }]);
+  });
+  try {
+    await callTelegramMultipart("123:abc", "sendMediaGroup", { chat_id: "1", media: JSON.stringify([{ type: "photo", media: "attach://media" }, { type: "photo", media: "attach://media1" }]) }, "media", [a, b], "a.jpg");
+    assert.equal(calls[0]?.url, "http://127.0.0.1:8081/bot123:abc/sendMediaGroup");
+    assert.deepEqual(calls[0]?.body.media, [{ type: "photo", media: `file://${a}` }, { type: "photo", media: `file://${b}` }]);
+    const out = await downloadTelegramFile("123:abc", "file-id", "received.jpg", join(dir, "received"));
+    assert.equal(await readFile(out, "utf8"), "first"); assert.equal(calls.length, 2);
+  } finally {
+    restore();
+    if (priorBase === undefined) delete process.env.PI_TELEGRAM_API_BASE; else process.env.PI_TELEGRAM_API_BASE = priorBase;
+    if (priorRoots === undefined) delete process.env.PI_TELEGRAM_LOCAL_FILE_ROOTS; else process.env.PI_TELEGRAM_LOCAL_FILE_ROOTS = priorRoots;
+    await rm(dir, { recursive: true, force: true });
   }
 });

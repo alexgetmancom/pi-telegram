@@ -52,6 +52,8 @@ test(
         getHandlers: () => handlers,
         tempDir,
         sendMultipart: async (_method, _fields, _fileField, filePath) => {
+          assert.equal(typeof filePath, "string");
+          if (typeof filePath !== "string") throw new Error("voice must be one file");
           uploads.push({
             filePath,
             content: await readFile(filePath, "utf8"),

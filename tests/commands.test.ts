@@ -3099,3 +3099,32 @@ test("Session action contains failures and emits a terminal failure result", asy
   assert.match(String(harness.failures[0]), /replacement failed/);
   assert.equal(harness.runtime.hasPending(), false);
 });
+
+test("Forum session replacement waits for leader transport before clearing its intent", async () => {
+  const target = { chatId: -1007, threadId: 16 };
+  const now = Date.now();
+  let intent: TelegramSessionReplacementIntent | undefined = { continuity: "forum-topic", cwd: "/repo", profileName: "default",
+    sourceSessionId: "old", sourceUpdateId: 1, messageId: 9, target, createdAtMs: now, expiresAtMs: now + 30000 };
+  let owns = false, removals = 0;
+  let delivered!: () => void;
+  const done = new Promise<void>(resolve => { delivered = resolve; });
+  const assembly = createTelegramSessionActionAssembly({
+    registerCommand: () => {}, sendUserMessage: () => {},
+    store: { load: async () => {}, refresh: async () => {}, getWorkspaceBindingByTarget: () => undefined,
+      getSessionReplacementIntent: () => intent, commitSessionReplacementIntent: async () => false,
+      removeSessionReplacementIntent: async (_intent, isCurrent) => {
+        removals++; assert.equal(isCurrent(), true); intent = undefined; return true;
+      } },
+    getProfileName: () => "default", getForumTarget: () => target, ownsPersistence: () => owns,
+    sendResult: async () => { delivered(); return { ok: true }; }, handoffTtlMs: 30000,
+  });
+  assembly.settlement.onSessionStart({ cwd: "/repo", sessionManager: { getSessionId: () => "new" } } as unknown as ExtensionContext);
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert.equal(removals, 0);
+  owns = true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try { await Promise.race([done, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("Forum replacement did not settle")), 2000); })]); }
+  finally { if (timer) clearTimeout(timer); }
+  assert.equal(removals, 1);
+  assert.equal(intent, undefined);
+});

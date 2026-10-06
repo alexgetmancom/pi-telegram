@@ -6,7 +6,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { startMediaAutomation, createCinemaRuntime, cinemaTarget } from "./cinema.mjs";
+import { startMediaAutomation } from "./media-automation.mjs";
+import telegram from "../dist/index.js";
 import {
   createAgentSessionFromServices,
   createAgentSessionRuntime,
@@ -19,7 +20,8 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const agentDir = getAgentDir();
 const cinemaMode = process.argv[2] === "cinema";
 if (process.argv[2] && !cinemaMode) throw new Error("Unknown session role");
-const cwd = process.cwd();
+const cwd = cinemaMode ? join(homedir(), "projects/home/cli-botlix") : process.cwd();
+const forumTarget = { chatId: -1003985826484, threadId: cinemaMode ? 3 : 16 };
 const sessionDir = join(agentDir, "sessions", "pi-telegram");
 function log(event, detail = {}) {
   let line = JSON.stringify({ at: new Date().toISOString(), event, ...detail });
@@ -29,10 +31,18 @@ function log(event, detail = {}) {
   process.stdout.write(`${line}\n`);
 }
 
-const runtime = cinemaMode ? await createCinemaRuntime(root, agentDir, sessionDir) : await createAgentSessionRuntime(async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
+const runtime = await createAgentSessionRuntime(async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
   const services = await createAgentSessionServices({
     cwd, agentDir,
-    resourceLoaderOptions: { noContextFiles: true, appendSystemPrompt: [join(root, "agent", "AGENTS.md"), ...["alex.md", "maru.md"].map(name => readFileSync(join(homedir(), ".local/share/family", name), "utf8"))] },
+    resourceLoaderOptions: {
+      noExtensions: true, noContextFiles: true,
+      appendSystemPrompt: [join(root, "agent", cinemaMode ? "CINEMA.md" : "AGENTS.md")],
+      extensionFactories: [pi => telegram(pi, { forumTarget }), pi => {
+        pi.on("before_agent_start", event => ({ systemPrompt: event.systemPrompt + "\n<family_preferences>\n" +
+          ["alex.md", "maru.md", "watchlist.md"].map(name => `${name}:\n${readFileSync(join(homedir(), ".local/share/family", name), "utf8")}`).join("\n\n") +
+          "\n</family_preferences>" }));
+      }],
+    },
   });
   const result = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent });
   if (services.diagnostics.some(item => item.type === "error") || result.extensionsResult.errors.length ||
@@ -59,7 +69,7 @@ async function bindSession(session) {
       switchSession: (path, options) => runtime.switchSession(path, options),
       fork: (id, options) => runtime.fork(id, options),
       navigateTree: (id, options) => runtime.session.navigateTree(id, options),
-      reload: () => runtime.reload(),
+      reload: () => runtime.session.reload(),
     },
     onError: error => log("extension_error", { error: error.error, source: error.extensionPath }),
     shutdownHandler: () => stop(),
@@ -72,11 +82,11 @@ async function bindSession(session) {
       log("model_error", { error: event.message.errorMessage });
     }
   });
-  await session.prompt("/telegram-connect", { source: "extension" });
-  log("session_started", { sessionId: session.sessionId, provider: session.model?.provider, model: session.model?.id });
+  log("session_started", { sessionId: session.sessionId, provider: session.model?.provider, model: session.model?.id, tools: session.getActiveToolNames(), skills: runtime.services.resourceLoader.getSkills().skills.map(skill => skill.name) });
 }
 runtime.setRebindSession(bindSession);
 await bindSession(runtime.session);
+await runtime.session.prompt("/telegram-connect", { source: "extension" });
 
 const stopMedia = cinemaMode ? startMediaAutomation(log) : undefined;
 
@@ -90,7 +100,7 @@ const server = createServer((request, response) => {
   } catch { /* Absent diagnostics mean not ready. */ }
   const connected = polling || runtime.session.getActiveToolNames().includes("telegram_attach");
   response.writeHead(connected ? 200 : 503, { "content-type": "application/json" });
-  response.end(JSON.stringify({ polling, connected, topic: cinemaMode ? cinemaTarget.threadId : 16, tools: runtime.session.getActiveToolNames(), pid: process.pid, sessionId: runtime.session.sessionId,
+  response.end(JSON.stringify({ polling, connected, topic: forumTarget.threadId, tools: runtime.session.getActiveToolNames(), pid: process.pid, sessionId: runtime.session.sessionId,
     provider: runtime.session.model?.provider, model: runtime.session.model?.id, busy: runtime.session.isStreaming }));
 });
 server.listen(cinemaMode ? 8187 : 8186, "127.0.0.1");

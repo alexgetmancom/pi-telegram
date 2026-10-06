@@ -4,7 +4,7 @@ The forum uses two native Pi instances with the same pi-telegram bridge. AI owns
 
 Both topics use the normal buttons, settings/model menus, draft streaming, reply context, inbound voice/files and outbound voice/media. Voice transcription uses the existing local ASR. Optional voice replies use `scripts/speak.mjs` and local Piper; manual/text replies remain the default. Image understanding depends on the selected model's vision support.
 
-Cinema enables botflix, family_memory, web_search, web_fetch and telegram_attach. Attachments are restricted to posters created by its botflix tool. Web search uses direct Brave HTML requests, matching the AI topic’s existing curl-based search; public page reading also uses direct HTTPS requests; no browser administration, cookies, shell, SSH or arbitrary host-file tools are exposed. Family memory can edit exactly alex.md, maru.md and watchlist.md. They are refreshed before every model turn. Media subscriptions and notifications remain unchanged.
+Both sessions use the same full native Pi and Telegram tools and skills. Their agent files define their focus; there is no Cinema tool allowlist or attachment filter. Cinema calls the BotFlix CLI through bash. Both read and edit family Markdown files with native file tools; current profiles are loaded before each model turn. Existing CLI subscriptions and notifications remain active.
 
 The shared Telegram profile keeps its AI forumTarget. Cinema supplies its own fixed target at runtime without overwriting that profile when settings change. Configured forum topics are operator-owned and are never automatically deleted on shutdown. `/new` affects only the topic's native session.
 

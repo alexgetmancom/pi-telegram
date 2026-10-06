@@ -1410,7 +1410,8 @@ export function createTelegramSessionActionAssembly(deps) {
                     if (intent.continuity === "forum-topic") {
                         const target = deps.getForumTarget?.();
                         return target?.chatId === intent.target.chatId && target.threadId === intent.target.threadId &&
-                            (intent.sourceInstanceId === undefined || deps.ownsPersistence() || deps.follower?.isRegisteredFor(intent.target) === true);
+                            (intent.sourceInstanceId === undefined ? deps.ownsPersistence() :
+                                deps.ownsPersistence() || deps.follower?.isRegisteredFor(intent.target) === true);
                     }
                     if (deps.store.getWorkspaceBindingByTarget(intent.target, sessionId)?.cwd !==
                         intent.cwd)

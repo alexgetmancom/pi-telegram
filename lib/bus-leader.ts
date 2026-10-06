@@ -306,6 +306,7 @@ export function createTelegramBusFollowerSessionReplacementAuthority(deps: {
     | "removeSessionReplacementIntent"
   >;
   getTelegramProfile?: () => string | undefined;
+  getForumTarget?: () => TelegramTarget | undefined;
   getNowMs?: () => number;
   ttlMs?: number;
 }): {
@@ -326,7 +327,8 @@ export function createTelegramBusFollowerSessionReplacementAuthority(deps: {
       : undefined;
     const nowMs = getNowMs();
     if (
-      intent.continuity !== "workspace-thread" ||
+      (intent.continuity !== "workspace-thread" &&
+        !(intent.continuity === "forum-topic" && deps.getForumTarget?.()?.chatId === intent.target.chatId && typeof intent.target.threadId === "number" && intent.target.threadId > 0)) ||
       typeof intent.target.threadId !== "number" ||
       follower.target?.chatId !== intent.target.chatId ||
       follower.target.threadId !== intent.target.threadId ||
@@ -354,12 +356,12 @@ export function createTelegramBusFollowerSessionReplacementAuthority(deps: {
       await deps.store.load();
       if (!isCurrent()) return false;
       const binding = deps.store.getWorkspaceBindingByTarget(intent.target);
-      if (
+      if (intent.continuity === "workspace-thread" && (
         !binding || binding.cwd !== intent.cwd ||
         binding.sessionId !== intent.sourceSessionId ||
         binding.slot !== intent.slot ||
         (binding.manualThreadName ?? binding.threadName) !== intent.threadName
-      ) {
+      )) {
         throw new Error("Telegram session replacement binding is unavailable.");
       }
       return deps.store.commitSessionReplacementIntent(intent, isCurrent);
@@ -378,8 +380,8 @@ export function createTelegramBusFollowerSessionReplacementAuthority(deps: {
       }
       await deps.store.load();
       if (!isCurrent()) return false;
-      if (deps.store.getWorkspaceBindingByTarget(intent.target, sessionId)?.cwd !==
-          intent.cwd) {
+      if (intent.continuity === "workspace-thread" &&
+          deps.store.getWorkspaceBindingByTarget(intent.target, sessionId)?.cwd !== intent.cwd) {
         throw new Error("Telegram session replacement successor binding is unavailable.");
       }
       return deps.store.removeSessionReplacementIntent(intent, isCurrent);
@@ -743,6 +745,7 @@ export function createTelegramBusLeaderRuntimeAssembly<TContext>(
     createTelegramBusFollowerSessionReplacementAuthority({
       store: deps.topicTargetStore,
       getTelegramProfile: deps.getTelegramProfile,
+      getForumTarget: deps.getForumTarget,
       getNowMs: deps.runtime.getNowMs,
     });
   const runtime = createTelegramBusLeaderRuntime({

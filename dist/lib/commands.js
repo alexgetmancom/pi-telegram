@@ -1409,7 +1409,8 @@ export function createTelegramSessionActionAssembly(deps) {
                         return true;
                     if (intent.continuity === "forum-topic") {
                         const target = deps.getForumTarget?.();
-                        return target?.chatId === intent.target.chatId && target.threadId === intent.target.threadId;
+                        return target?.chatId === intent.target.chatId && target.threadId === intent.target.threadId &&
+                            (intent.sourceInstanceId === undefined || deps.ownsPersistence() || deps.follower?.isRegisteredFor(intent.target) === true);
                     }
                     if (deps.store.getWorkspaceBindingByTarget(intent.target, sessionId)?.cwd !==
                         intent.cwd)

@@ -149,6 +149,7 @@ export type TelegramBusFollowerSessionReplacementOperation = (follower: Telegram
 export declare function createTelegramBusFollowerSessionReplacementAuthority(deps: {
     store: Pick<Threads.TelegramTopicTargetStore, "load" | "getWorkspaceBindingByTarget" | "getSessionReplacementIntent" | "commitSessionReplacementIntent" | "removeSessionReplacementIntent">;
     getTelegramProfile?: () => string | undefined;
+    getForumTarget?: () => TelegramTarget | undefined;
     getNowMs?: () => number;
     ttlMs?: number;
 }): {

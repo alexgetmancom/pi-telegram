@@ -4017,6 +4017,11 @@ export function createTelegramInboundRouteRuntime(deps) {
         handleAuthorizedTelegramEditedMessage: editRuntime.updateFromEditedMessage,
         handleAuthorizedTelegramGuestMessage,
         handleUnboundTelegramTopicMessage: (message, ctx) => {
+            const forum = deps.configStore.get().forumTarget;
+            if (forum?.chatId === message.chat.id && forum.threadId === message.message_thread_id) {
+                Updates.createTelegramUpdateExecutionFenceGuard(message)();
+                return textDispatch.handleMessage(message, ctx);
+            }
             const operation = async () => {
                 const assertExecutionCurrent = Updates.createTelegramUpdateExecutionFenceGuard(message);
                 assertExecutionCurrent();

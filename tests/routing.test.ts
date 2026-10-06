@@ -8922,3 +8922,18 @@ for (const mode of ["registration", "process", "executor", "reply-loss", "old-ta
     }, "follower");
   });
 }
+
+test("Configured forum prompt bypasses stale private Workspace routing", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "telegram-forum-routing-"));
+  try {
+    const store = Threads.createTelegramTopicTargetStore({ path: join(dir, "state.json") });
+    store.upsert({ profileKey: "cwd:/repo", owner: { kind: "leader", cwd: "/repo", instanceId: "old" },
+      target: { chatId: 7, threadId: 42 }, status: "active", createdAtMs: 1, updatedAtMs: 1 });
+    await store.persist();
+    const { routeRuntime, events } = createRouteHarness({ config: { forumTarget: { chatId: -1007, threadId: 16 } }, threadStore: store,
+      callApi: async () => { throw new Error("must not probe private chat"); } });
+    await routeRuntime.handleUpdate({ message: { message_id: 13, message_thread_id: 16,
+      chat: { id: -1007, type: "supergroup" }, from: { id: 8, is_bot: false }, text: "Hello" } }, { cwd: "/repo" });
+    assert.equal(events.includes("dispatch"), true);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

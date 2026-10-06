@@ -6508,3 +6508,23 @@ test("Leader publishes and claims follower session replacement only for exact li
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("Configured forum follower replaces its session without private Workspace bindings", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "telegram-forum-replacement-"));
+  try {
+    const store = createTelegramTopicTargetStore({ path: join(dir, "state.json"), getNowMs: () => 1000 });
+    const target = { chatId: -1007, threadId: 3 };
+    const source = { instanceId: "cinema", cwd: "/cinema", sessionId: "old", target, connectedAtMs: 1, lastHeartbeatMs: 1000 };
+    const intent = { continuity: "forum-topic" as const, cwd: "/cinema", profileName: "default",
+      sourceSessionId: "old", sourceInstanceId: "cinema", sourceUpdateId: 1, messageId: 9, target,
+      createdAtMs: 1000, expiresAtMs: 31000 };
+    const authority = createTelegramBusFollowerSessionReplacementAuthority({ store, getNowMs: () => 1000,
+      getForumTarget: () => ({ chatId: -1007, threadId: 16 }) });
+    await assert.rejects(authority.publish(source, { ...intent, cwd: "/other" }, () => true));
+    await assert.rejects(authority.publish(source, { ...intent, target: { chatId: -1008, threadId: 3 } }, () => true));
+    assert.equal(await authority.publish(source, intent, () => true), true);
+    assert.equal(await authority.settle({ ...source, instanceId: "cinema-next", previousInstanceId: "cinema", sessionId: "new" }, intent, () => true), true);
+    assert.equal(store.getSessionReplacementIntent(), undefined);
+    assert.deepEqual(store.listWorkspaceBindings(), []);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

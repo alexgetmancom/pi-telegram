@@ -22,9 +22,9 @@ Keep the future implementation a separate Go CLI, like BotFlix: direct source
 access, one JSON object, no HTTP server, Telegram client or ORM.
 
 Start with the existing SQLite data. Each person already has a separate
-`miband_<Telegram ID>.db`; the plain `miband.db` is empty. Confirm the identity
-mapping before showing another person's records. The second configured account
-must not be assigned to Maru merely because two databases exist.
+`miband_<Telegram ID>.db`; the plain `miband.db` is empty. The operator confirmed the second account belongs to Maru; exact source paths
+and attribution are recorded only in private health profiles. Keep current
+Telegram participant IDs separate from legacy database IDs.
 
 Tables cover steps_daily, sleep_daily, sleep_stages, heart_rate, blood_oxygen,
 stress, calories_daily, weight and workouts. Some endpoints can fail while the

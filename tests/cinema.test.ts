@@ -118,3 +118,30 @@ test("Health report keeps people separate and missing data unknown; weekly caden
   const view = healthReportView({ alex: { metrics: { steps: { data: [{ average: 1234, observed_days: 2 }] } }, sync: [] }, maru: { metrics: {}, sync: [{ metric: "sleep_details", error: "source failure" }] } });
   assert.match(view.text, /Алекс[\s\S]*1234/); assert.match(view.text, /Маша[\s\S]*нет данных/); assert.match(view.text, /sleep_details/);
 });
+
+test("Health automation preserves partial CLI results and never repeats uncertain weekly sends", async () => {
+  const scheduled: Array<() => void> = [];
+  let receipt: string | undefined;
+  let sends = 0;
+  const commands: string[] = [];
+  const source = readFileSync(new URL("../scripts/health-automation.mjs", import.meta.url), "utf8")
+    .replace(/^import \{([^}]+)\} from "([^"]+)";/gm, (_all, names: string, module: string) => `const {${names}} = imports[${JSON.stringify(module)}];`)
+    .replace(/^export function /gm, "function ");
+  class Sunday extends Date { constructor() { super("2026-10-11T18:00:00Z"); } }
+  const context = createContext({ AbortController, Intl, Date: Sunday, setTimeout: (fn: () => void) => { scheduled.push(fn); return { unref() {} }; }, clearTimeout() {}, imports: {
+    "node:child_process": { execFile: async (_binary: string, args: string[]) => {
+      commands.push(args[0]);
+      if (args[0] === "tick") throw Object.assign(new Error("partial failure"), { stdout: JSON.stringify({ ok: false, data: {}, error: "source failed" }) });
+      return { stdout: JSON.stringify({ ok: true, data: { alex: { metrics: {}, sync: [] } } }) };
+    } },
+    "node:util": { promisify: (fn: unknown) => fn }, "node:path": { join }, "node:os": { homedir: () => "/private" },
+    "node:fs": { readFileSync: () => { if (!receipt) throw Object.assign(new Error("missing"), { code: "ENOENT" }); return receipt; }, writeFileSync: (_path: string, body: string) => { receipt = body; }, renameSync() {} },
+    "../dist/api/delivery.js": { sendTelegramView: async (_view: unknown, options: { scope: { target: { threadId: number } } }) => { sends++; assert.equal(options.scope.target.threadId, 359); assert.equal(JSON.parse(receipt!).state, "claimed"); return { ok: false, reason: "commit-unknown" }; } },
+  } });
+  new Script(source + "\nglobalThis.startAudit = startHealthAutomation;").runInContext(context);
+  const stop = context.startAudit(() => {});
+  scheduled.shift()?.(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(JSON.parse(receipt!).state, "uncertain");
+  scheduled.shift()?.(); await new Promise(resolve => setImmediate(resolve));
+  await stop(); assert.equal(sends, 1); assert.deepEqual(commands, ["tick", "compare", "tick"]);
+});

@@ -6,4 +6,6 @@ Use `health status` to check each metric's coverage/error, `health compare --per
 
 History remains in the existing SQLite files under `/opt/miband-tracker/data`; confirmed ownership lives in private Health profiles. CLI tokens/configuration live separately under `~/.config/health` with permissions 0600. The old `miband-bot-ts` container is stopped and its restart disabled to prevent a second writer. Its source and original credentials remain preserved. Do not restart it alongside CLI sync.
 
-Maru's FDS nighttime detail currently returns Xiaomi `device not exist`. CLI preserves this metric error while still importing other metrics. Alex's newest data can be stale independently by metric. Check actual coverage rather than infer recency from sync success. No missing samples are synthesized.
+FDS nighttime pulse/oxygen detail uses the observed physical device ID for both download authorization and suffix hash. It is verified on Maru's live account. More than one observed device is reported as ambiguity, not guessed. Alex's newest data can be stale independently by metric. Check actual coverage rather than infer recency from sync success. No missing samples are synthesized.
+
+Workout identity is the source device ID plus source record timestamp. Old bot records were keyed only by device and collapsed multiple workouts. Existing keys were migrated once and source cursors reset during cutover; cloud history was imported again.

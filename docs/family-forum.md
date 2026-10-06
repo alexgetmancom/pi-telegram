@@ -1,12 +1,12 @@
 # Family forum deployment
 
-The forum uses two native Pi instances with the same pi-telegram bridge. AI owns topic 16; Cinema owns topic 3. The native leader/follower bus keeps one Telegram poller and routes each topic's messages, callbacks, edits, reactions and media to its own session. Both participants share each topic; the two histories remain separate. General stays silent.
+The forum uses three native Pi instances with the same pi-telegram bridge. AI owns topic 16; Cinema owns topic 3; Health owns topic 359. The native leader/follower bus keeps one Telegram poller and routes each topic's messages, callbacks, edits, reactions and media to its own session. Both participants share each topic; the three histories remain separate. General stays silent.
 
-Both topics use the normal buttons, settings/model menus, draft streaming, reply context, inbound voice/files and outbound voice/media. Voice transcription uses the existing local ASR. Optional voice replies use `scripts/speak.mjs` and local Piper; manual/text replies remain the default. Image understanding depends on the selected model's vision support.
+All topics use the normal buttons, settings/model menus, draft streaming, reply context, inbound voice/files and outbound voice/media. Voice transcription uses the existing local ASR. Optional voice replies use `scripts/speak.mjs` and local Piper; manual/text replies remain the default. Image understanding depends on the selected model's vision support.
 
-Both sessions use the same full native Pi and Telegram tools and skills. Their agent files define their focus; there is no Cinema tool allowlist or attachment filter. Cinema calls the BotFlix CLI through bash. Both read and edit family Markdown files with native file tools; current profiles are loaded before each model turn. Existing CLI subscriptions and notifications remain active. Family viewing uses the single Jellyfin `root` account. `botflix continue` and `next SERIES_ID` use its real viewing state. Torrent file selection uses `prepare` → `torrent-files` → `select-files` → `resume`; preparation does not start content downloads. Direct `qbit GET|POST ENDPOINT` is available for diagnostics and rare operations; normal media additions use `download`/`prepare` so CLI tracking remains authoritative. From is owned by the CLI after its one-time subscription transfer.
+All sessions use the same full native Pi and Telegram tools and skills. Their agent files define their focus; there is no Cinema tool allowlist or attachment filter. Cinema calls the BotFlix CLI through bash. Both read and edit family Markdown files with native file tools; current profiles are loaded before each model turn. Existing CLI subscriptions and notifications remain active. Family viewing uses the single Jellyfin `root` account. `botflix continue` and `next SERIES_ID` use its real viewing state. Torrent file selection uses `prepare` → `torrent-files` → `select-files` → `resume`; preparation does not start content downloads. Direct `qbit GET|POST ENDPOINT` is available for diagnostics and rare operations; normal media additions use `download`/`prepare` so CLI tracking remains authoritative. From is owned by the CLI after its one-time subscription transfer.
 
-The shared Telegram profile keeps its AI forumTarget. Cinema supplies its own fixed target at runtime without overwriting that profile when settings change. Configured forum topics are operator-owned and are never automatically deleted on shutdown. `/new` affects only the topic's native session.
+The shared Telegram profile keeps its AI forumTarget. Cinema and Health supply their own fixed targets at runtime without overwriting that profile when settings change. Configured forum topics are operator-owned and are never automatically deleted on shutdown. `/new` affects only the topic's native session.
 
 ## Install on the host
 
@@ -31,18 +31,20 @@ Set Pi's `defaultProvider` to `deepseek` and `defaultModel` to `deepseek-flash`.
 
 ```sh
 mkdir -p ~/.config/systemd/user
-cp systemd/pi-telegram.service systemd/pi-telegram-cinema.service ~/.config/systemd/user/
+cp systemd/pi-telegram.service systemd/pi-telegram-cinema.service systemd/pi-telegram-health.service ~/.config/systemd/user/
 sudo loginctl enable-linger "$USER"
 systemctl --user daemon-reload
 systemctl --user enable --now pi-telegram
 systemctl --user enable --now pi-telegram-cinema
+systemctl --user enable --now pi-telegram-health
 curl --fail http://127.0.0.1:8186/healthz
 curl --fail http://127.0.0.1:8187/healthz
+curl --fail http://127.0.0.1:8188/healthz
 ```
 
 `/start` opens the menu; `/model` selects the model; `/compact` summarizes context; `/new` starts a fresh shared session with native confirmation and retains this topic. A model switch continues the same native conversation. Older sessions remain on disk.
 
-Runtime instructions are in [agent/AGENTS.md](../agent/AGENTS.md) for AI and [agent/CINEMA.md](../agent/CINEMA.md) for Cinema. Both native histories live under `~/.pi/agent/sessions/pi-telegram`, isolated by session CWD (home for AI, `~/projects/home/cli-botlix` for Cinema), and resume after restart. `/new` affects only its topic. Diagnose with `journalctl --user -u pi-telegram`; health at ports 8186 (AI) and 8187 (Cinema) includes each session ID, tools and transport role. Interrupted in-memory queued work is not replayed; resend it.
+Runtime instructions are in [agent/AGENTS.md](../agent/AGENTS.md) for AI and [agent/CINEMA.md](../agent/CINEMA.md) for Cinema and [agent/HEALTH.md](../agent/HEALTH.md) for Health. All native histories live under `~/.pi/agent/sessions/pi-telegram`, isolated by session CWD (home for AI, `~/projects/home/cli-botlix` for Cinema, `~/.local/share/family/health` for Health), and resume after restart. `/new` affects only its topic. Diagnose with `journalctl --user -u pi-telegram`; health at ports 8186 (AI), 8187 (Cinema) and 8188 (Health) includes each session ID, tools and transport role. Interrupted in-memory queued work is not replayed; resend it.
 
 ## Private family memory and daily reflection
 
@@ -56,7 +58,7 @@ Reflection can update only `alex.md`, `maru.md` and `watchlist.md`; it cannot re
 
 For a live test, run `node scripts/reflect.mjs --date YYYY-MM-DD` with the service environment loaded. An unfinished day is marked partial and will be reviewed again by the scheduled run. `--inspect` lists the selected source entries without calling the model or changing memory. After setup, check `systemctl --user list-timers pi-telegram-reflection.timer`.
 
-To update, pull `main`, run `npm ci` and `npm run build`, then `systemctl --user restart pi-telegram pi-telegram-cinema`. Keep this as the deployment path; GitHub Actions validates the fork.
+To update, pull `main`, run `npm ci` and `npm run build`, then `systemctl --user restart pi-telegram pi-telegram-cinema pi-telegram-health`. Keep this as the deployment path; GitHub Actions validates the fork.
 
 ## Local Bot API and family media
 
@@ -67,7 +69,7 @@ runs as uid/gid 1000, listens only at 127.0.0.1:8081 and shares the same absolut
 on-disk paths for Bot API data and generated attachments. Do not expose its port
 or print/list bot-token-named data directories.
 
-Both Pi services read these additions from their existing private EnvironmentFile:
+All Pi services read these additions from their existing private EnvironmentFile:
 
 ```sh
 PI_TELEGRAM_API_BASE=http://127.0.0.1:8081
@@ -78,14 +80,14 @@ PI_TELEGRAM_INBOUND_FILE_MAX_BYTES=2000000000
 
 Local Bot API supports 2000 MB uploads. Shared real paths are sent as file URIs;
 local getFile results are copied only from configured shared roots. Other paths
-use streamed multipart. Before moving a bot from api.telegram.org, stop both Pi
-services and call cloud logOut once, then restart both against the local server.
+use streamed multipart. Before moving a bot from api.telegram.org, stop all Pi
+services and call cloud logOut once, then restart all against the local server.
 Local and cloud endpoints may use different update-ID ranges. Keep the old
 polling journal and segments as a private archive; do not carry its cursor into
 the new endpoint. Seed the new cursor just before the oldest pending local
 update, preserving pending inputs. A missing cursor bootstraps by skipping history,
 so it must not be used when queued user messages need processing. Verify incoming
-requests in both native session histories after both registrations are ready;
+requests in all native session histories after all registrations are ready;
 connected health and successful outbound uploads do not prove inbound routing.
 Never keep the same bot logged in at both endpoints. This briefly interrupts
 chat replies; native sessions remain on disk. Reverting to cloud Bot API after
@@ -98,6 +100,20 @@ attachment. Both direct and follower delivery use the same path.
 
 BotFlix CLI supplies catalog, exact-ID poster/trailers, advisory woke checks and
 video download/preparation. Telegram delivery remains in Pi. General AGENTS.md
-loads in both topics; CINEMA.md adds only the cinema workflow. Family Markdown
+loads in all topics; CINEMA.md and HEALTH.md add their respective workflows. Family Markdown
 files contain tastes and viewing facts, not credentials or a second ratings
 cache. Site scores may warn but never filter recommendations or downloads.
+
+## Health session and Mi Band migration boundary
+
+Create `~/.local/share/family/health` (0700) before enabling Health, with private
+`alex.md`, `maru.md` and `notes.md` (0600). Health uses this directory as its CWD,
+which gives it an independent native session. Individual health facts and plans
+stay in these files; the ordinary nightly reflection does not copy detailed
+health records into general profiles or watchlist. All three sessions keep the
+same tools and Telegram controls; only Cinema runs media tick.
+
+The existing Mi Band Bot is currently read-only for this work and for Health.
+Do not invoke its sync/login/token refresh/export or import modules that initialize
+SQLite. No Health CLI has been installed. The initial code/data review and useful
+CLI scope are in [Health CLI migration](./health-cli.md).

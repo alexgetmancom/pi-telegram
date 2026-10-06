@@ -54,3 +54,56 @@ test("Media automation sends a poster, acknowledges only delivery and cleans tem
   assert.deepEqual(calls, ["tick", "events", "poster", "claim", "ack"]);
   assert.equal(existsSync(posterPath), false);
 });
+
+test("family SDK host keeps Health isolated with full tools and only Cinema automation", async () => {
+  const source = readFileSync(new URL("../scripts/serve.mjs", import.meta.url), "utf8")
+    .replace(/^#!.*\n/u, "")
+    .replace(/^import ([\s\S]*?) from "([^"]+)";/gm, (_all, names: string, module: string) => names.trim().startsWith("{")
+      ? `const ${names} = imports[${JSON.stringify(module)}];`
+      : `const ${names} = imports[${JSON.stringify(module)}].default;`);
+  const expected = [
+    { role: undefined, topic: 16, port: 8186, cwd: "/home/alex", agent: undefined, automation: false },
+    { role: "cinema", topic: 3, port: 8187, cwd: "/home/alex/projects/home/cli-botlix", agent: "CINEMA.md", automation: true },
+    { role: "health", topic: 359, port: 8188, cwd: "/home/alex/.local/share/family/health", agent: "HEALTH.md", automation: false },
+  ];
+  for (const target of expected) {
+    const calls: { cwd?: string; topic?: number; port?: number; instructions?: string[]; automation?: boolean; prompt?: string; healthFiles?: string[] } = { healthFiles: [] };
+    const sessionManager = { getSessionFile: () => "/session.jsonl", getHeader: () => ({}), getEntries: () => [], setSessionFile: () => {} };
+    const before: Array<(event: { systemPrompt: string }) => unknown> = [];
+    const tools = ["read", "bash", "edit", "write", "telegram_attach", "telegram_bind", "telegram_channel_post", "telegram_channel_posts", "telegram_message"];
+    const session = { sessionManager, sessionId: target.role ?? "ai", model: { provider: "test", id: "test" }, isStreaming: false,
+      getActiveToolNames: () => tools, bindExtensions: async () => {}, subscribe: () => () => {}, prompt: async (prompt: string) => { calls.prompt = prompt; } };
+    const context = createContext({ console, URL, Object, JSON, AbortController,
+      process: { argv: ["node", "serve.mjs", ...(target.role ? [target.role] : [])], cwd: () => "/home/alex", env: {}, stdout: { write: () => {} }, once: () => {} },
+      imports: {
+        "node:http": { createServer: () => ({ listen: (port: number) => { calls.port = port; }, close: () => {} }) },
+        "node:fs": { existsSync: () => true, writeFileSync: () => {}, readFileSync: (path: string) => { calls.healthFiles!.push(path); return "memory"; } },
+        "node:path": { dirname: () => "/repo", join: (...parts: string[]) => parts.join("/") },
+        "node:os": { homedir: () => "/home/alex" }, "node:url": { fileURLToPath: () => "/repo/scripts/serve.mjs" },
+        "./media-automation.mjs": { startMediaAutomation: () => { calls.automation = true; return () => {}; } },
+        "../dist/index.js": { default: (_pi: unknown, config: { forumTarget: { threadId: number } }) => { calls.topic = config.forumTarget.threadId; } },
+        "@earendil-works/pi-coding-agent": {
+          getAgentDir: () => "/agent", SessionManager: { continueRecent: (cwd: string) => { calls.cwd = cwd; return sessionManager; } },
+          createAgentSessionRuntime: async (factory: (input: unknown) => Promise<{ services: unknown }>, config: { cwd: string }) => {
+            const result = await factory({ cwd: config.cwd, agentDir: "/agent", sessionManager, sessionStartEvent: {} });
+            return { session, services: result.services, setRebindSession: () => {}, dispose: async () => {} };
+          },
+          createAgentSessionServices: async (config: { resourceLoaderOptions: { appendSystemPrompt: string[]; extensionFactories: Array<(pi: unknown) => void> } }) => {
+            calls.instructions = config.resourceLoaderOptions.appendSystemPrompt;
+            for (const factory of config.resourceLoaderOptions.extensionFactories) factory({ on: (_name: string, handler: (event: { systemPrompt: string }) => unknown) => { before.push(handler); } });
+            return { diagnostics: [], resourceLoader: { getSkills: () => ({ skills: [] }) } };
+          },
+          createAgentSessionFromServices: async () => ({ extensionsResult: { errors: [], extensions: [{ commands: new Map([["telegram-connect", {}]]) }] } }),
+        },
+      },
+    });
+    // import.meta is the only source syntax unavailable to a vm Script.
+    await new Script(`(async () => { ${source.replaceAll("import.meta.url", '"file:///repo/scripts/serve.mjs"')} })()`).runInContext(context);
+    before[0]?.({ systemPrompt: "test" });
+    assert.equal(calls.cwd, target.cwd); assert.equal(calls.topic, target.topic); assert.equal(calls.port, target.port);
+    assert.equal(Boolean(calls.automation), target.automation); assert.equal(calls.prompt, "/telegram-connect");
+    assert.equal(calls.instructions?.some(path => path.endsWith(target.agent ?? "NO_EXTRA_AGENT")), Boolean(target.agent));
+    assert.equal(calls.healthFiles?.some(path => path.endsWith("health/alex.md")), target.role === "health");
+    assert.equal(calls.healthFiles?.some(path => path.endsWith("watchlist.md")), target.role !== "health");
+  }
+});

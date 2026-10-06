@@ -26,3 +26,5 @@ Living index of project documentation in `/docs`.
 - [sections.md](./sections.md) — Telegram Extension Sections Standard: registration contract, context ports, callback routing, navigation hierarchy, and demo reference for pi extensions that want Telegram UI surfaces
 - [voice.md](./voice.md) — Voice integration guide: detection, reply policy, STT/TTS provider registration, provider-owned conversion, and transparent interception
 - [ui-style.md](./ui-style.md) — Inline UI style guide for buttons, toggles, tabs, option lists, cards, and dialogs
+
+- [Health CLI migration](./health-cli.md): read-only Mi Band review and future CLI scope.

@@ -18,10 +18,16 @@ import {
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const agentDir = getAgentDir();
-const cinemaMode = process.argv[2] === "cinema";
-if (process.argv[2] && !cinemaMode) throw new Error("Unknown session role");
-const cwd = cinemaMode ? join(homedir(), "projects/home/cli-botlix") : process.cwd();
-const forumTarget = { chatId: -1003985826484, threadId: cinemaMode ? 3 : 16 };
+const role = process.argv[2] ?? "ai";
+const sessions = {
+  ai: { cwd: process.cwd(), topic: 16, port: 8186, notes: ["watchlist.md"] },
+  cinema: { cwd: join(homedir(), "projects/home/cli-botlix"), topic: 3, port: 8187, instructions: "CINEMA.md", notes: ["watchlist.md"], startAutomation: startMediaAutomation },
+  health: { cwd: join(homedir(), ".local/share/family/health"), topic: 359, port: 8188, instructions: "HEALTH.md", notes: ["health/alex.md", "health/maru.md", "health/notes.md"] },
+};
+const sessionConfig = Object.hasOwn(sessions, role) ? sessions[role] : undefined;
+if (!sessionConfig || process.argv[3]) throw new Error("Unknown session role: use ai, cinema or health");
+const cwd = sessionConfig.cwd;
+const forumTarget = { chatId: -1003985826484, threadId: sessionConfig.topic };
 const sessionDir = join(agentDir, "sessions", "pi-telegram");
 function log(event, detail = {}) {
   let line = JSON.stringify({ at: new Date().toISOString(), event, ...detail });
@@ -36,10 +42,10 @@ const runtime = await createAgentSessionRuntime(async ({ cwd, agentDir, sessionM
     cwd, agentDir,
     resourceLoaderOptions: {
       noExtensions: true, noContextFiles: true,
-      appendSystemPrompt: [join(root, "skills/telegram-bridge/SKILL.md"), join(root, "agent/TELEGRAM.md"), join(root, "agent/AGENTS.md"), ...(cinemaMode ? [join(root, "agent/CINEMA.md")] : [])],
+      appendSystemPrompt: [join(root, "skills/telegram-bridge/SKILL.md"), join(root, "agent/TELEGRAM.md"), join(root, "agent/AGENTS.md"), ...(sessionConfig.instructions ? [join(root, "agent", sessionConfig.instructions)] : [])],
       extensionFactories: [pi => telegram(pi, { forumTarget }), pi => {
         pi.on("before_agent_start", event => ({ systemPrompt: event.systemPrompt + "\n<family_preferences>\n" +
-          ["alex.md", "maru.md", "watchlist.md"].map(name => `${name}:\n${readFileSync(join(homedir(), ".local/share/family", name), "utf8")}`).join("\n\n") +
+          ["alex.md", "maru.md", ...sessionConfig.notes].map(name => `${name}:\n${readFileSync(join(homedir(), ".local/share/family", name), "utf8")}`).join("\n\n") +
           "\n</family_preferences>" }));
       }],
     },
@@ -88,7 +94,7 @@ runtime.setRebindSession(bindSession);
 await bindSession(runtime.session);
 await runtime.session.prompt("/telegram-connect", { source: "extension" });
 
-const stopMedia = cinemaMode ? startMediaAutomation(log) : undefined;
+const stopAutomation = sessionConfig.startAutomation?.(log);
 
 const server = createServer((request, response) => {
   if (request.url !== "/healthz") { response.writeHead(404).end(); return; }
@@ -103,7 +109,7 @@ const server = createServer((request, response) => {
   response.end(JSON.stringify({ polling, connected, topic: forumTarget.threadId, tools: runtime.session.getActiveToolNames(), pid: process.pid, sessionId: runtime.session.sessionId,
     provider: runtime.session.model?.provider, model: runtime.session.model?.id, busy: runtime.session.isStreaming }));
 });
-server.listen(cinemaMode ? 8187 : 8186, "127.0.0.1");
+server.listen(sessionConfig.port, "127.0.0.1");
 
 let stopping = false;
 async function stop() {
@@ -111,7 +117,7 @@ async function stop() {
   stopping = true;
   server.close();
   unsubscribe?.();
-  try { await stopMedia?.(); await runtime.dispose(); log("stopped"); process.exit(0); }
+  try { await stopAutomation?.(); await runtime.dispose(); log("stopped"); process.exit(0); }
   catch (error) { log("shutdown_error", { error: String(error) }); process.exit(1); }
 }
 process.once("SIGINT", stop);

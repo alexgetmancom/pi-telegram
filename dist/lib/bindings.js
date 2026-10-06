@@ -562,12 +562,14 @@ export function registerTelegramLifecycleRuntimeHooks({ pi, publicationRuntime, 
             sendChatAction: undefined,
             sendRecordVoiceAction: undefined,
             sendMultipart: async (_method, _fields, _fileField, filePath, fileName) => {
+                if (typeof filePath !== "string")
+                    throw new Error("Guest voice requires one file");
                 try {
                     await OutboundAttachments.deliverTelegramGuestCachedAttachment({
                         guestQueryId: turn.guestQueryId,
                         stagingChatId,
                         stagingTarget,
-                        attachment: { path: typeof filePath === "string" ? filePath : (() => { throw new Error("Guest voice requires one file"); })(), fileName },
+                        attachment: { path: filePath, fileName },
                         caption,
                         sendMultipart: callMultipart,
                         answerGuestQuery: (guestQueryId, result) => answerGuestQuery(guestQueryId, undefined, { result }),

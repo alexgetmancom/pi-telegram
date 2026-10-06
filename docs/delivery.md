@@ -55,6 +55,10 @@ export interface TelegramDeliveryView {
 
 `replyMarkup` accepts only structural keyboard data. Callback ownership stays with Sections or a registered raw update handler. The documented external consumer shape uses Sections for interactive Settings toggles and keeps delivered activity rows non-interactive, so a second managed callback registry would duplicate token, answer, edit, navigation, and cleanup ownership without a proven use case. Revisit only when a public-import-only consumer must generate managed callbacks independently of a registered Section context for arbitrary delivered messages.
 
+### Photos
+
+`sendTelegramPhoto(absoluteFilePath, view, options)` sends a local poster through the same authorized target, transport generation and per-target serialization. Caption text is limited to 900 characters; the inline keyboard is retained. The trusted host owns and removes its temporary file after delivery. This capability does not expose bot credentials or start another Telegram transport.
+
 ### Target scopes
 
 ```ts

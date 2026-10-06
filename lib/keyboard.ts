@@ -13,7 +13,8 @@ export type TelegramInlineKeyboardButton = {
   text: string;
   style?: TelegramInlineKeyboardButtonStyle;
 } & (
-  | { callback_data: string; disabled?: never }
+  | { callback_data: string; disabled?: never; url?: never }
+  | { url: string; callback_data?: never; disabled?: never }
   | { disabled: Record<string, never>; callback_data?: never }
 );
 

@@ -1,19 +1,19 @@
 /** Cinema's native Pi session and bounded CLI capability; the existing bridge owns Telegram. */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync, mkdtempSync, rmSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { Type } from "@sinclair/typebox";
 import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, SessionManager } from "@earendil-works/pi-coding-agent";
 import { registerTelegramUpdateHandler } from "../dist/api/updates.js";
 import { transcribeTelegramVoiceMessage } from "../dist/api/inbound.js";
-import { registerTelegramDeliveryTarget, sendTelegramView, sendTelegramChatAction } from "../dist/api/delivery.js";
+import { registerTelegramDeliveryTarget, sendTelegramView, sendTelegramPhoto, sendTelegramChatAction } from "../dist/api/delivery.js";
 
 const executeFile = promisify(execFile);
 export const cinemaTarget = Object.freeze({ chatId: -1003985826484, threadId: 3 });
-const actions = ["search", "series", "episodes", "releases", "download", "download-season", "downloads", "stop", "remove", "library", "item", "refresh"];
+const actions = ["search", "series", "episodes", "releases", "download", "download-season", "downloads", "stop", "remove", "library", "item", "refresh", "subscribe", "unsubscribe", "subscriptions", "schedule", "history", "stats", "disk", "diagnostics", "check"];
 const sources = ["all", "lostfilm", "rutor", "nnm", "rutracker"];
 const memoryFiles = ["alex.md", "maru.md", "watchlist.md"];
 const cinemaTools = ["botflix", "family_memory"];
@@ -53,7 +53,14 @@ export function cinemaArguments(p) {
   };
   switch (p.action) {
     case "search": source(); limit(); args.push(required("query")); break;
-    case "series": seriesURL(); break;
+    case "subscribe":
+      if (!["1080p", "720p", "SD"].includes(p.quality ?? "1080p")) throw new Error("Invalid quality");
+      args.push("--quality", p.quality ?? "1080p"); seriesURL(); break;
+    case "unsubscribe": case "series": seriesURL(); break;
+    case "history": limit(); break;
+    case "stats":
+      if (!["day", "week", "month", "last"].includes(p.period ?? "week")) throw new Error("Invalid period");
+      args.push("--period", p.period ?? "week"); break;
     case "episodes": season(); seriesURL(); break;
     case "releases": {
       const code = required("code");
@@ -100,7 +107,7 @@ function hash(value) {
 }
 
 export const botflixTool = {
-  name: "botflix", label: "BotFlix", description: "Search trackers, browse LostFilm, manage torrents and query Jellyfin. No host shell or files. Removing a torrent keeps its files.",
+  name: "botflix", label: "BotFlix", description: "Search trackers, browse LostFilm, manage torrents, subscriptions, schedule, download history, viewing stats, disk space and diagnostics. No host shell or files. Removing a torrent keeps its files.",
   parameters: Type.Object({
     action: Type.Union(actions.map(v => Type.Literal(v))),
     source: Type.Optional(Type.Union(sources.map(v => Type.Literal(v)))),
@@ -110,6 +117,7 @@ export const botflixTool = {
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })), hash: Type.Optional(Type.String()),
     itemId: Type.Optional(Type.String()), itemType: Type.Optional(Type.Union([Type.Literal("Movie"), Type.Literal("Series"), Type.Literal("Episode")])),
     recent: Type.Optional(Type.Boolean()),
+    period: Type.Optional(Type.Union([Type.Literal("day"), Type.Literal("week"), Type.Literal("month"), Type.Literal("last")])),
   }, { additionalProperties: false }),
   async execute(_id, parameters, signal) {
     const args = cinemaArguments(parameters);
@@ -191,10 +199,63 @@ export function cinemaMessage(update) {
   return m;
 }
 
+export function mediaEventView(event) {
+  const escape = text => String(text).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+  const item = event.item;
+  return { text: escape(event.text.slice(0, 220)) + (item ? `\n\n<b>${escape(item.Name.slice(0, 120))}</b>\n${escape((item.Overview ?? "").slice(0, 350))}` : ""),
+    parseMode: "html", ...(item?.watch_url ? { replyMarkup: { inline_keyboard: [[{ text: "▶ Открыть в Jellyfin", url: item.watch_url }]] } } : {}) };
+}
+
 export function connectCinema(runtime, log) {
   const unregisterTarget = registerTelegramDeliveryTarget(cinemaTarget);
   const scope = { kind: "target", target: cinemaTarget };
   let queue = Promise.resolve(), generation = 0;
+  const mediaController = new AbortController();
+  let mediaTimer, mediaRun;
+  const mediaCLI = async args => {
+    const { stdout } = await executeFile(join(homedir(), ".local/bin/botflix"), args, {
+      shell: false, signal: mediaController.signal, timeout: 180000, maxBuffer: 4 * 1024 * 1024,
+      env: { HOME: homedir(), PATH: "/usr/bin:/bin" },
+    });
+    const result = JSON.parse(stdout);
+    if (!result.ok) throw new Error(result.error || "Media command failed");
+    return result.data;
+  };
+  const pollMedia = async () => {
+    try {
+      const tick = await mediaCLI(["tick"]);
+      if (tick.error) log("media_tick_error", { error: tick.error });
+      const events = await mediaCLI(["events"]);
+      for (const event of events) {
+        if (mediaController.signal.aborted) return;
+        if (event.delivery) continue;
+        const view = mediaEventView(event);
+        let result;
+        if (event.item?.ImageTags?.Primary) {
+          const dir = mkdtempSync(join(tmpdir(), "botflix-poster-"));
+          const path = join(dir, "poster.jpg");
+          try {
+            try { await mediaCLI(["poster", "--output", path, event.item.Id]); }
+            catch (error) { if (mediaController.signal.aborted) return; log("media_poster_error", { id: event.id, error: error.message }); }
+            if (mediaController.signal.aborted) return;
+            await mediaCLI(["claim", String(event.id)]);
+            result = existsSync(path) ? await sendTelegramPhoto(path, view, { scope }) : await sendTelegramView(view, { scope });
+          } finally { rmSync(dir, { recursive: true }); }
+        } else { await mediaCLI(["claim", String(event.id)]); result = await sendTelegramView(view, { scope }); }
+        if (!result.ok) {
+          if (result.reason !== "commit-unknown" && !result.partial) await mediaCLI(["retry-event", String(event.id)]);
+          throw new Error(`Media delivery failed: ${result.reason}; event ${event.id}`);
+        }
+        await mediaCLI(["ack", String(event.id)]);
+        log("media_event_delivered", { id: event.id, kind: event.kind, topic: cinemaTarget.threadId });
+      }
+    } catch (error) {
+      if (!mediaController.signal.aborted) log("media_automation_error", { error: error.message });
+    } finally {
+      if (!mediaController.signal.aborted) { mediaTimer = setTimeout(() => { mediaRun = pollMedia(); }, 60000); mediaTimer.unref(); }
+    }
+  };
+  mediaTimer = setTimeout(() => { mediaRun = pollMedia(); }, 1000); mediaTimer.unref();
   const send = async text => {
     const result = await sendTelegramView({ text, parseMode: "markdown" }, { scope });
     if (!result.ok) throw new Error(`Cinema delivery failed: ${result.reason}`);
@@ -250,5 +311,5 @@ export function connectCinema(runtime, log) {
     });
     return "consume";
   });
-  return async () => { generation++; unregisterUpdates(); unregisterTarget(); await runtime.dispose(); };
+  return async () => { generation++; mediaController.abort(); clearTimeout(mediaTimer); await mediaRun; unregisterUpdates(); unregisterTarget(); await runtime.dispose(); };
 }

@@ -59,6 +59,7 @@ test("Public package subpaths expose the stable extension API", async () => {
     "editTelegramView",
     "registerTelegramDeliveryTarget",
     "sendTelegramChatAction",
+    "sendTelegramPhoto",
     "sendTelegramView",
   ]);
   assert.deepEqual(Object.keys(activity).sort(), [

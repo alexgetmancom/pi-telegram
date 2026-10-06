@@ -9,7 +9,7 @@ import type { TelegramMessageUser } from "./media.ts";
 
 import type {
   TelegramInlineKeyboardButtonStyle,
-  TelegramInlineKeyboardMarkup,
+  TelegramInlineKeyboardButton,
 } from "./keyboard.ts";
 import {
   getTelegramActionString as getTelegramButtonString,
@@ -45,7 +45,9 @@ export interface TelegramOutboundButtonStoredAction extends TelegramOutboundButt
   createdAt: number;
 }
 
-export type TelegramOutboundButtonMarkup = TelegramInlineKeyboardMarkup;
+export interface TelegramOutboundButtonMarkup {
+  inline_keyboard: Array<Array<Exclude<TelegramInlineKeyboardButton, { url: string }>>>;
+}
 
 export interface TelegramButtonReplyPlan {
   markdown: string;

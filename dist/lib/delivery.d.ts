@@ -53,6 +53,7 @@ export interface TelegramDeliveryRuntime {
     readonly generation: string;
     shutdown: () => void;
     sendView: (view: TelegramDeliveryView, options: SendTelegramViewOptions) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
+    sendPhoto?: (filePath: string, view: TelegramDeliveryView, options: SendTelegramViewOptions) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
     editView: (handle: TelegramDeliveryHandle, view: TelegramDeliveryView) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
     deleteView: (handle: TelegramDeliveryHandle) => Promise<TelegramDeliveryResult<void>>;
     sendChatAction: (action: TelegramDeliveryChatAction, scope: TelegramDeliveryScope) => Promise<TelegramDeliveryResult<void>>;
@@ -79,6 +80,7 @@ export interface TelegramDeliveryRuntimeDeps extends TelegramDeliveryTargetResol
     generation: string;
     renderView: (view: TelegramDeliveryView) => readonly TelegramDeliveryRenderedChunk[];
     sendChunk: (target: TelegramDeliveryTarget, chunk: TelegramDeliveryRenderedChunk, options: TelegramDeliveryTransportOptions) => Promise<number>;
+    sendPhoto?: (target: TelegramDeliveryTarget, filePath: string, chunk: TelegramDeliveryRenderedChunk, options: TelegramDeliveryTransportOptions) => Promise<number>;
     editChunk: (target: TelegramDeliveryTarget, messageId: number, chunk: TelegramDeliveryRenderedChunk, options: TelegramDeliveryTransportOptions) => Promise<void>;
     deleteMessage: (target: TelegramDeliveryTarget, messageId: number) => Promise<void>;
     sendChatAction: (target: TelegramDeliveryTarget, action: TelegramDeliveryChatAction) => Promise<void>;
@@ -91,6 +93,7 @@ export interface TelegramBridgeDeliveryRuntimeDeps {
     getActiveTurnTarget: () => TelegramDeliveryTarget | undefined;
     isTransportActive?: () => boolean;
     api: Pick<TelegramBridgeApiRuntime, "sendMessage" | "editMessageText" | "deleteMessage" | "sendChatAction">;
+    photoApi?: Pick<TelegramBridgeApiRuntime, "callMultipart">;
     recordOwnership: (input: {
         chatId: number;
         messageId: number;
@@ -154,6 +157,8 @@ export declare function clearTelegramDeliveryRuntime(): void;
 /** @internal */
 export declare function isTelegramDeliveryHandleCurrent(handle: TelegramDeliveryHandle): boolean;
 export declare function sendTelegramView(view: TelegramDeliveryView, options: SendTelegramViewOptions): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
+/** Deliver a local photo through the same authorized, generation-fenced transport. */
+export declare function sendTelegramPhoto(filePath: string, view: TelegramDeliveryView, options: SendTelegramViewOptions): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
 /** @internal Edit an exact Telegram message through the currently bound runtime generation. */
 export declare function editTelegramTargetView(target: TelegramDeliveryTarget, messageId: number, view: TelegramDeliveryView): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
 export declare function editTelegramView(handle: TelegramDeliveryHandle, view: TelegramDeliveryView): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;

@@ -6,7 +6,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { homedir } from "node:os";
 // @ts-expect-error The deployed SDK host runs native JavaScript.
-import { cinemaArguments, cinemaMessage, cinemaTarget, connectCinema, familyMemoryTool } from "../scripts/cinema.mjs";
+import { cinemaArguments, cinemaMessage, cinemaTarget, connectCinema, familyMemoryTool, mediaEventView } from "../scripts/cinema.mjs";
 import { registerTelegramDeliveryTarget, createTelegramDeliveryTargetPolicyRuntime, isTelegramDeliveryExplicitTargetAuthorized } from "../lib/delivery.ts";
 
 test("Cinema accepts both humans only in its exact forum topic", () => {
@@ -108,4 +108,14 @@ test("Family memory confines writes to three files, refuses stale reads and veri
     assert.equal(files.size, 1);
     await assert.rejects(familyMemoryTool.execute("id", { action: "write", file: "alex.md", content: "overwrite", expectedSha256: read.sha256 }));
   } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+});
+
+test("Cinema exposes subscriptions and reports but not automation event delivery controls", async () => {
+  assert.deepEqual(cinemaArguments({ action: "subscribe", quality: "720p", url: "/series/From" }), ["subscribe", "--quality", "720p", "https://www.lostfilm.tv/series/From"]);
+  assert.deepEqual(cinemaArguments({ action: "stats", period: "month" }), ["stats", "--period", "month"]);
+  for (const action of ["events", "ack", "claim", "tick", "retry-event"]) assert.throws(() => cinemaArguments({ action }));
+  assert.throws(() => cinemaArguments({ action: "stats", period: "arbitrary SQL" }));
+  const view = mediaEventView({ text: "Downloaded <movie>", item: { Name: "Movie & name", Overview: "<bad>", watch_url: "https://jf.i/watch" } });
+  assert.equal(view.parseMode, "html"); assert.match(view.text, /&lt;movie&gt;/); assert.match(view.text, /Movie &amp; name/);
+  assert.equal(view.replyMarkup.inline_keyboard[0][0].url, "https://jf.i/watch");
 });

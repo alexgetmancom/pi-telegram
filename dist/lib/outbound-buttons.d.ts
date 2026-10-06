@@ -4,7 +4,7 @@
  * Owns assistant-authored telegram_button extraction, button action storage, callback handling, and prompt-turn construction
  */
 import type { TelegramMessageUser } from "./media.ts";
-import type { TelegramInlineKeyboardButtonStyle, TelegramInlineKeyboardMarkup } from "./keyboard.ts";
+import type { TelegramInlineKeyboardButtonStyle, TelegramInlineKeyboardButton } from "./keyboard.ts";
 import { type PendingTelegramTurn, type TelegramQueueTarget } from "./queue.ts";
 export interface TelegramOutboundButtonBinding {
     generation: string;
@@ -21,7 +21,11 @@ export interface TelegramOutboundButtonAction {
 export interface TelegramOutboundButtonStoredAction extends TelegramOutboundButtonAction {
     createdAt: number;
 }
-export type TelegramOutboundButtonMarkup = TelegramInlineKeyboardMarkup;
+export interface TelegramOutboundButtonMarkup {
+    inline_keyboard: Array<Array<Exclude<TelegramInlineKeyboardButton, {
+        url: string;
+    }>>>;
+}
 export interface TelegramButtonReplyPlan {
     markdown: string;
     replyMarkup?: TelegramOutboundButtonMarkup;

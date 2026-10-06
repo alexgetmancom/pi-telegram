@@ -805,6 +805,7 @@ export default function (pi: Pi.ExtensionAPI) {
       isTransportStampActive: telegramTransportStampRuntime.isActive,
       getActiveTurnTarget: deliveryTargetPolicyRuntime.getActiveTurnTarget,
       api: telegramApiRuntime,
+      photoApi: telegramApiRuntime,
       recordOwnership: messageOwnershipRuntime.recordLocal,
       recordFailure(operation, error, target) {
         recordRuntimeEvent("delivery", error, {

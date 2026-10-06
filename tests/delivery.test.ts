@@ -752,3 +752,39 @@ test("Concrete delivery runtime serializes operations per target", async () => {
   await Promise.all([sending, action]);
   assert.deepEqual(order, ["first-start", "first-end", "action"]);
 });
+
+test("Photo delivery enforces target authorization, caption limits and runtime generation", async () => {
+  const photos: unknown[] = [];
+  const { runtime } = createConcreteRuntimeHarness({
+    async sendPhoto(destination, filePath, chunk, options) { photos.push({ destination, filePath, chunk, options }); return 900; },
+  });
+  const view = { text: "Downloaded", replyMarkup: { inline_keyboard: [[{ text: "Watch", url: "https://jf.i" }]] } };
+  const scope = { kind: "target" as const, target };
+  assert.equal((await runtime.sendPhoto!("/tmp/poster.jpg", view, { scope })).ok, true);
+  assert.equal(photos.length, 1);
+  assert.equal((await runtime.sendPhoto!("/tmp/poster.jpg", view, { scope: { kind: "target", target: { chatId: 99 } } })).ok, false);
+  assert.equal((await runtime.sendPhoto!("/tmp/poster.jpg", { text: "x".repeat(901) }, { scope })).ok, false);
+  runtime.shutdown();
+  assert.equal((await runtime.sendPhoto!("/tmp/poster.jpg", view, { scope })).ok, false);
+  assert.equal(photos.length, 1);
+});
+
+test("Bridge photo uses existing multipart transport with exact topic and ownership", async () => {
+  const calls: unknown[] = [], ownership: unknown[] = [];
+  let active = true;
+  const runtime = createTelegramBridgeDeliveryRuntime({
+    generation: "photo", getTargetPolicyView: () => ({ canDeliver: true, ownsDirect: true, allowedChatId: 42, leaderTarget: target }),
+    getActiveTurnTarget: () => target, isTransportActive: () => active,
+    api: { async sendMessage() { throw new Error("unexpected text send"); }, async editMessageText() { throw new Error("unexpected edit"); }, async deleteMessage() {}, async sendChatAction() { return true; } },
+    photoApi: { async callMultipart<T>(method: string, fields: Record<string, string>, fileField: string, path: string) {
+      calls.push({ method, fields, fileField, path }); return { message_id: 901 } as T;
+    } }, recordOwnership: input => { ownership.push(input); },
+  });
+  const result = await runtime.sendPhoto!("/tmp/poster.jpg", { text: "<b>Ready</b>", parseMode: "html" }, { scope: { kind: "target", target } });
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls, [{ method: "sendPhoto", fields: { chat_id: "42", caption: "<b>Ready</b>", parse_mode: "HTML", message_thread_id: "7" }, fileField: "photo", path: "/tmp/poster.jpg" }]);
+  assert.deepEqual(ownership, [{ chatId: 42, messageId: 901, target }]);
+  active = false;
+  assert.equal((await runtime.sendPhoto!("/tmp/poster.jpg", { text: "Ready" }, { scope: { kind: "target", target } })).ok, false);
+  assert.equal(calls.length, 1);
+});

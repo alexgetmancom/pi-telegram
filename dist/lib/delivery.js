@@ -295,6 +295,34 @@ export function createTelegramDeliveryRuntime(deps) {
                 }
             });
         },
+        async sendPhoto(filePath, view, options) {
+            if (!active)
+                return inactive();
+            const resolved = resolveTelegramDeliveryTarget(options.scope, deps);
+            if (!resolved.ok)
+                return failure(resolved.reason, resolved.message);
+            if (!deps.sendPhoto)
+                return failure("runtime-unavailable", "Photo delivery is unavailable.");
+            const rendered = render(view);
+            if (!rendered.ok)
+                return failure(rendered.reason, rendered.message);
+            if (rendered.value.length !== 1 || (view.parseMode === "html" ? view.text.replace(/<[^>]*>/g, "").replace(/&(?:#\d+|#x[\da-f]+|[a-z]+);/gi, "x").length : view.text.length) > 900)
+                return failure("invalid-view", "Photo caption is too long.");
+            const target = resolved.value;
+            return runForTarget(target, async () => {
+                if (!active)
+                    return inactive();
+                try {
+                    const id = await deps.sendPhoto(target, filePath, rendered.value[0], getChunkTransportOptions(view, 0, 1, options.replyToMessageId));
+                    if (!active)
+                        return inactive();
+                    return { ok: true, value: createHandle(target, [id]) };
+                }
+                catch (error) {
+                    return active ? transportFailure("send", error, target) : inactive();
+                }
+            });
+        },
         async editView(handle, view) {
             const resolved = resolveHandle(handle);
             if (!resolved.ok)
@@ -448,6 +476,20 @@ export function createTelegramBridgeDeliveryRuntime(deps) {
             });
             return sent.message_id;
         },
+        async sendPhoto(target, filePath, chunk, options) {
+            assertTransportActive();
+            if (!deps.photoApi)
+                throw new Error("Photo transport is unavailable.");
+            const sent = await deps.photoApi.callMultipart("sendPhoto", {
+                chat_id: String(target.chatId), caption: chunk.text,
+                ...(chunk.parseMode === "html" ? { parse_mode: "HTML" } : {}),
+                ...(target.threadId === undefined ? {} : { message_thread_id: String(target.threadId) }),
+                ...(options.replyMarkup ? { reply_markup: JSON.stringify(options.replyMarkup) } : {}),
+            }, "photo", filePath, "poster.jpg");
+            assertTransportActive();
+            deps.recordOwnership({ chatId: target.chatId, messageId: sent.message_id, target });
+            return sent.message_id;
+        },
         async editChunk(target, messageId, chunk, options) {
             assertTransportActive();
             await deps.api.editMessageText({
@@ -525,6 +567,15 @@ export async function sendTelegramView(view, options) {
     if (invalid)
         return invalid;
     return runDeliveryOperation((runtime) => runtime.sendView(view, options));
+}
+/** Deliver a local photo through the same authorized, generation-fenced transport. */
+export async function sendTelegramPhoto(filePath, view, options) {
+    const invalid = validateView(view);
+    if (invalid)
+        return invalid;
+    if (typeof filePath !== "string" || !filePath.startsWith("/") || filePath.includes("\0"))
+        return failure("invalid-view", "An absolute photo file is required.");
+    return runDeliveryOperation(runtime => runtime.sendPhoto ? runtime.sendPhoto(filePath, view, options) : Promise.resolve(failure("runtime-unavailable", "Photo delivery is unavailable.")));
 }
 /** @internal Edit an exact Telegram message through the currently bound runtime generation. */
 export async function editTelegramTargetView(target, messageId, view) {

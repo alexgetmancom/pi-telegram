@@ -48,7 +48,6 @@ test("Public package subpaths expose the stable extension API", async () => {
   assert.deepEqual(Object.keys(root), ["default"]);
   assert.deepEqual(Object.keys(inbound).sort(), [
     "registerTelegramInboundHandler",
-    "transcribeTelegramVoiceMessage",
   ]);
   assert.deepEqual(Object.keys(outbound).sort(), [
     "recordTelegramRuntimeEvent",
@@ -57,7 +56,6 @@ test("Public package subpaths expose the stable extension API", async () => {
   assert.deepEqual(Object.keys(delivery).sort(), [
     "deleteTelegramView",
     "editTelegramView",
-    "registerTelegramDeliveryTarget",
     "sendTelegramChatAction",
     "sendTelegramPhoto",
     "sendTelegramView",

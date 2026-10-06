@@ -328,6 +328,8 @@ export function createTelegramActiveProfileKeyGetter(
 }
 
 export interface TelegramConfigStoreOptions {
+  /** Runtime-owned fixed forum topic; never written into the shared profile. */
+  forumTarget?: TelegramForumTarget;
   initialConfig?: TelegramConfig;
   agentDir?: string;
   configPath?: string;
@@ -731,12 +733,16 @@ export function createTelegramConfigStore(
   const agentDir = options.agentDir ?? resolveAgentDir();
   const configPath = options.configPath ?? getConfigPath();
   const env = options.env ?? process.env;
-  const getEffectiveConfig = () =>
-    applyTelegramProfile(config, activeProfileName);
+  const getEffectiveConfig = () => {
+    const effective = applyTelegramProfile(config, activeProfileName);
+    return options.forumTarget ? { ...effective, forumTarget: options.forumTarget } : effective;
+  };
+  const storedView = (next: TelegramConfig) => options.forumTarget
+    ? { ...next, forumTarget: applyTelegramProfile(config, activeProfileName).forumTarget } : next;
   const setEffectiveConfig = (nextConfig: TelegramConfig) => {
     config = storeTelegramEffectiveConfig(
       config,
-      nextConfig,
+      storedView(nextConfig),
       activeProfileName,
     );
     mutationVersion += 1;
@@ -943,7 +949,7 @@ export function createTelegramConfigStore(
       const profileName = activeProfileName;
       const desiredConfig = storeTelegramEffectiveConfig(
         config,
-        cloneTelegramConfig(nextConfig),
+        cloneTelegramConfig(storedView(nextConfig)),
         profileName,
       );
       const baseConfig = cloneTelegramConfig(persistedConfig);
@@ -1225,7 +1231,7 @@ export function createTelegramProactivePushTargetGetter(deps: {
 function createTelegramAutomaticThreadCleanupChecker(
   configStore: Pick<TelegramConfigStore, "get">,
 ): () => boolean {
-  return () => configStore.get().threads?.automaticCleanup ?? true;
+  return () => !configStore.get().forumTarget && (configStore.get().threads?.automaticCleanup ?? true);
 }
 
 function createTelegramAutomaticThreadCleanupResolver(

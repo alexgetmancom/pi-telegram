@@ -415,9 +415,14 @@ export function createTelegramConfigStore(options = {}) {
     const agentDir = options.agentDir ?? resolveAgentDir();
     const configPath = options.configPath ?? getConfigPath();
     const env = options.env ?? process.env;
-    const getEffectiveConfig = () => applyTelegramProfile(config, activeProfileName);
+    const getEffectiveConfig = () => {
+        const effective = applyTelegramProfile(config, activeProfileName);
+        return options.forumTarget ? { ...effective, forumTarget: options.forumTarget } : effective;
+    };
+    const storedView = (next) => options.forumTarget
+        ? { ...next, forumTarget: applyTelegramProfile(config, activeProfileName).forumTarget } : next;
     const setEffectiveConfig = (nextConfig) => {
-        config = storeTelegramEffectiveConfig(config, nextConfig, activeProfileName);
+        config = storeTelegramEffectiveConfig(config, storedView(nextConfig), activeProfileName);
         mutationVersion += 1;
     };
     const adoptPersistedConfig = (merged, preserveLocalChanges) => {
@@ -612,7 +617,7 @@ export function createTelegramConfigStore(options = {}) {
         didLastLoadRecoverInvalidConfig: () => lastLoadRecoveredInvalidConfig,
         persist: (nextConfig = getEffectiveConfig(), options) => {
             const profileName = activeProfileName;
-            const desiredConfig = storeTelegramEffectiveConfig(config, cloneTelegramConfig(nextConfig), profileName);
+            const desiredConfig = storeTelegramEffectiveConfig(config, cloneTelegramConfig(storedView(nextConfig)), profileName);
             const baseConfig = cloneTelegramConfig(persistedConfig);
             const capturedMutationVersion = mutationVersion;
             const persist = persistQueue.then(() => {
@@ -808,7 +813,7 @@ export function createTelegramProactivePushTargetGetter(deps) {
     };
 }
 function createTelegramAutomaticThreadCleanupChecker(configStore) {
-    return () => configStore.get().threads?.automaticCleanup ?? true;
+    return () => !configStore.get().forumTarget && (configStore.get().threads?.automaticCleanup ?? true);
 }
 function createTelegramAutomaticThreadCleanupResolver(configStore) {
     return async () => {

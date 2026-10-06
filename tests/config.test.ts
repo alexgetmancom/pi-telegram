@@ -2008,3 +2008,21 @@ test("Pairing admission hashes the resolved token reference", async () => {
     await rm(agentDir, { recursive: true, force: true });
   }
 });
+
+test("Runtime forum topic stays local when settings are persisted", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pi-forum-runtime-"));
+  const configPath = join(dir, "telegram.json");
+  const original = { chatId: -1007, threadId: 16 };
+  try {
+    const parent = createTelegramConfigStore({ agentDir: dir, configPath,
+      initialConfig: { profiles: { default: { botToken: "123:abc", forumTarget: original } } } });
+    await parent.persist();
+    const child = createTelegramConfigStore({ agentDir: dir, configPath, forumTarget: { chatId: -1007, threadId: 3 } });
+    await child.load();
+    child.set({ ...child.get(), assistant: { draftPreviews: true } });
+    await child.persist();
+    assert.equal(child.get().forumTarget?.threadId, 3);
+    assert.deepEqual(JSON.parse(await readFile(configPath, "utf8")).profiles.default.forumTarget, original);
+    await parent.load(); assert.equal(parent.get().assistant?.draftPreviews, true);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

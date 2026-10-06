@@ -653,6 +653,7 @@ export interface TelegramThreadCapabilityStore {
 }
 
 export interface TelegramThreadCapabilityReaderDeps {
+  getForumTarget?: () => { chatId: number; threadId: number } | undefined;
   getAllowedUserId: () => number | undefined;
   callApi: <TResponse>(
     method: string,
@@ -870,6 +871,7 @@ export function createTelegramThreadCapabilityOrchestration<TContext, TOwner>(
     lifecycle,
     getAllowedUserId: deps.getAllowedUserId,
     callApi: deps.callApi,
+    getForumTarget: deps.getForumTarget,
     topicTargetStore: deps.topicTargetStore,
     ownsLock: deps.ownsLock,
     isFollowerRegistered: deps.isFollowerRegistered,
@@ -895,6 +897,7 @@ export function createTelegramThreadCapabilityOrchestration<TContext, TOwner>(
       lifecycle,
       getAllowedUserId: deps.getAllowedUserId,
       callApi: deps.callApi,
+      getForumTarget: deps.getForumTarget,
       topicTargetStore: deps.topicTargetStore,
       isBusRuntimeEnabled: deps.isBusRuntimeEnabled,
       isTopicModeUnavailableError: deps.isTopicModeUnavailableError,
@@ -921,6 +924,7 @@ export function createTelegramThreadCapabilityOrchestration<TContext, TOwner>(
 async function readTelegramThreadCapability(
   deps: TelegramThreadCapabilityReaderDeps,
 ): Promise<boolean | undefined> {
+  if (deps.getForumTarget?.()) return true;
   const bot = await deps.callApi<{ has_topics_enabled?: boolean }>("getMe", {});
   if (bot.has_topics_enabled === true) return true;
   if (bot.has_topics_enabled === false) return false;

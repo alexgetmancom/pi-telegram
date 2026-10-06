@@ -147,6 +147,8 @@ export interface TelegramConfigStore {
 export declare function createTelegramConfigBotIdGetter(store: Pick<TelegramConfigStore, "get">): () => number | undefined;
 export declare function createTelegramActiveProfileKeyGetter(store: Pick<TelegramConfigStore, "getActiveProfileName">): () => string;
 export interface TelegramConfigStoreOptions {
+    /** Runtime-owned fixed forum topic; never written into the shared profile. */
+    forumTarget?: TelegramForumTarget;
     initialConfig?: TelegramConfig;
     agentDir?: string;
     configPath?: string;

@@ -6,8 +6,6 @@
 import { type TelegramInlineKeyboardMarkup } from "./keyboard.ts";
 import { type TelegramTarget } from "./target.ts";
 import { type TelegramBridgeApiRuntime } from "./telegram-api.ts";
-/** Trusted companion hosts explicitly authorize their own forum delivery target. */
-export declare function registerTelegramDeliveryTarget(target: TelegramDeliveryTarget): () => void;
 export type TelegramDeliveryParseMode = "plain" | "html" | "markdown";
 export interface TelegramDeliveryView {
     text: string;

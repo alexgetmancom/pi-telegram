@@ -7,7 +7,6 @@
 export {
   deleteTelegramView,
   editTelegramView,
-  registerTelegramDeliveryTarget,
   sendTelegramChatAction,
   sendTelegramView,
   sendTelegramPhoto,

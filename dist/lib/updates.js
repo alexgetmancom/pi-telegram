@@ -595,7 +595,13 @@ export async function executeTelegramUpdate(update, allowedUserId, deps) {
     const runtimeDeps = update[TELEGRAM_INTERNAL_AGENT_MESSAGE]
         ? { ...deps, getMessageOwnership: undefined }
         : deps;
-    await executeTelegramUpdatePlan(buildTelegramUpdateExecutionPlanFromUpdate(update, allowedUserId, deps.forumTarget), runtimeDeps);
+    const message = update.callback_query?.message ?? update.message ?? update.edited_message;
+    const target = message ? getTelegramMessageTarget(message) : undefined;
+    const foreign = deps.forumTarget && target?.chatId === deps.forumTarget.chatId && target.threadId !== deps.forumTarget.threadId
+        ? getForeignTelegramTargetOwnership(target, deps) : undefined;
+    const forumTarget = deps.forumTarget && foreign && target?.chatId === deps.forumTarget.chatId && target.threadId
+        ? { chatId: target.chatId, threadId: target.threadId } : deps.forumTarget;
+    await executeTelegramUpdatePlan(buildTelegramUpdateExecutionPlanFromUpdate(update, allowedUserId, forumTarget), runtimeDeps);
 }
 export function createTelegramPairedUpdateRuntime(deps) {
     return createTelegramUpdateRuntime({

@@ -160,6 +160,10 @@ export interface TelegramThreadCapabilityStore {
     list?: () => TelegramThreadCapabilityRecordView[];
 }
 export interface TelegramThreadCapabilityReaderDeps {
+    getForumTarget?: () => {
+        chatId: number;
+        threadId: number;
+    } | undefined;
     getAllowedUserId: () => number | undefined;
     callApi: <TResponse>(method: string, body: Record<string, unknown>) => Promise<TResponse>;
 }

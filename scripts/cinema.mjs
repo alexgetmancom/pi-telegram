@@ -6,18 +6,18 @@ import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { Type } from "@sinclair/typebox";
+import telegram from "../dist/index.js";
+import { webSearchTool, webFetchTool } from "./web.mjs";
 import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, SessionManager } from "@earendil-works/pi-coding-agent";
-import { registerTelegramUpdateHandler } from "../dist/api/updates.js";
-import { transcribeTelegramVoiceMessage } from "../dist/api/inbound.js";
-import { registerTelegramDeliveryTarget, sendTelegramView, sendTelegramPhoto, sendTelegramChatAction } from "../dist/api/delivery.js";
+import { sendTelegramView, sendTelegramPhoto } from "../dist/api/delivery.js";
 
 const executeFile = promisify(execFile);
 export const cinemaTarget = Object.freeze({ chatId: -1003985826484, threadId: 3 });
-const actions = ["search", "series", "episodes", "releases", "download", "download-season", "downloads", "stop", "remove", "library", "item", "refresh", "subscribe", "unsubscribe", "subscriptions", "schedule", "history", "stats", "disk", "diagnostics", "check"];
+const actions = ["search", "series", "episodes", "releases", "download", "download-season", "downloads", "stop", "remove", "library", "item", "poster", "refresh", "subscribe", "unsubscribe", "subscriptions", "schedule", "history", "stats", "disk", "diagnostics", "check"];
 const sources = ["all", "lostfilm", "rutor", "nnm", "rutracker"];
 const memoryFiles = ["alex.md", "maru.md", "watchlist.md"];
-const cinemaTools = ["botflix", "family_memory"];
-const help = "Кино: ищу фильмы и сериалы, управляю загрузками и проверяю Jellyfin.\n/new — новая кино-сессия\n/compact — сжать историю\n/stop — остановить ответ и очистить очередь\n/model — модель; /model provider/model — переключить";
+const cinemaTools = ["botflix", "family_memory", "web_search", "web_fetch", "telegram_attach"];
+const cinemaArtifacts = new Set();
 
 export function cinemaArguments(p) {
   if (!actions.includes(p.action)) throw new Error("Unsupported BotFlix action");
@@ -120,7 +120,13 @@ export const botflixTool = {
     period: Type.Optional(Type.Union([Type.Literal("day"), Type.Literal("week"), Type.Literal("month"), Type.Literal("last")])),
   }, { additionalProperties: false }),
   async execute(_id, parameters, signal) {
-    const args = cinemaArguments(parameters);
+    let poster;
+    let args;
+    if (parameters.action === "poster") {
+      if (!/^[a-f\d]{32}$/i.test(parameters.itemId ?? "")) throw new Error("Invalid poster item id");
+      poster = join(mkdtempSync(join(tmpdir(), "cinema-artifact-")), "poster.jpg");
+      args = ["poster", "--output", poster, parameters.itemId];
+    } else { args = cinemaArguments(parameters); }
     let stdout;
     try {
       ({ stdout } = await executeFile(join(homedir(), ".local/bin/botflix"), args, {
@@ -132,6 +138,7 @@ export const botflixTool = {
       stdout = error.stdout;
     }
     const result = JSON.parse(stdout);
+    if (poster && result.ok) { cinemaArtifacts.add(poster); result.poster_path = poster; }
     return { content: [{ type: "text", text: JSON.stringify(result) }], details: { ok: result.ok }, isError: !result.ok };
   },
 };
@@ -170,7 +177,13 @@ export async function createCinemaRuntime(root, agentDir, sessionDir) {
     const services = await createAgentSessionServices({ cwd, agentDir, resourceLoaderOptions: {
       noExtensions: true, noSkills: true, noContextFiles: true, noPromptTemplates: true, noThemes: true,
       systemPrompt: readFileSync(join(root, "agent/CINEMA.md"), "utf8"),
-      extensionFactories: [pi => {
+      extensionFactories: [pi => telegram(pi, { forumTarget: cinemaTarget }), pi => {
+        pi.on("tool_call", event => {
+          if (event.toolName === "telegram_attach" &&
+              (!Array.isArray(event.input.paths) || event.input.paths.some(path => !cinemaArtifacts.has(path)))) {
+            return { block: true, reason: "Only posters created by botflix in this process may be attached; arbitrary files are unavailable." };
+          }
+        });
         pi.on("before_agent_start", event => ({ systemPrompt: event.systemPrompt + "\n<family_preferences>\n" +
           memoryFiles.map(name =>
             `${name}:\n${readFileSync(join(homedir(), ".local/share/family", name), "utf8")}`).join("\n\n") +
@@ -178,10 +191,8 @@ export async function createCinemaRuntime(root, agentDir, sessionDir) {
       }],
     } });
     const result = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent,
-      tools: cinemaTools, customTools: [botflixTool, familyMemoryTool] });
-    if (result.session.getActiveToolNames().sort().join() !== cinemaTools.join() || result.extensionsResult.extensions.length !== 1 || result.extensionsResult.errors.length) throw new Error("Cinema tool isolation failed");
-    await result.session.bindExtensions({ mode: "rpc" });
-    if (result.session.getActiveToolNames().sort().join() !== cinemaTools.join()) throw new Error("Cinema tool isolation changed after binding");
+      tools: cinemaTools, customTools: [botflixTool, familyMemoryTool, webSearchTool, webFetchTool] });
+    if (result.session.getActiveToolNames().some(name => !cinemaTools.includes(name)) || result.extensionsResult.extensions.length !== 2 || result.extensionsResult.errors.length) throw new Error("Cinema tool isolation failed");
     const file = sessionManager.getSessionFile();
     if (file && !existsSync(file)) {
       writeFileSync(file, [sessionManager.getHeader(), ...sessionManager.getEntries()].map(entry => JSON.stringify(entry)).join("\n") + "\n", { flag: "wx", mode: 0o600 });
@@ -191,14 +202,6 @@ export async function createCinemaRuntime(root, agentDir, sessionDir) {
   }, { cwd, agentDir, sessionManager: SessionManager.continueRecent(cwd, sessionDir) });
 }
 
-export function cinemaMessage(update) {
-  const m = update?.message;
-  if (!m || m.chat?.type !== "supergroup" || m.chat.id !== cinemaTarget.chatId || m.message_thread_id !== cinemaTarget.threadId ||
-      !m.from || m.from.is_bot || !Number.isSafeInteger(m.from.id) || m.from.id <= 0) return;
-  if (m.text?.match(/^\/\w+@/i) && !m.text.match(/^\/\w+@getmanmaru_bot(?:\s|$)/i)) return;
-  return m;
-}
-
 export function mediaEventView(event) {
   const escape = text => String(text).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
   const item = event.item;
@@ -206,10 +209,8 @@ export function mediaEventView(event) {
     parseMode: "html", ...(item?.watch_url ? { replyMarkup: { inline_keyboard: [[{ text: "▶ Открыть в Jellyfin", url: item.watch_url }]] } } : {}) };
 }
 
-export function connectCinema(runtime, log) {
-  const unregisterTarget = registerTelegramDeliveryTarget(cinemaTarget);
+export function startMediaAutomation(log) {
   const scope = { kind: "target", target: cinemaTarget };
-  let queue = Promise.resolve(), generation = 0;
   const mediaController = new AbortController();
   let mediaTimer, mediaRun;
   const mediaCLI = async args => {
@@ -256,60 +257,5 @@ export function connectCinema(runtime, log) {
     }
   };
   mediaTimer = setTimeout(() => { mediaRun = pollMedia(); }, 1000); mediaTimer.unref();
-  const send = async text => {
-    const result = await sendTelegramView({ text, parseMode: "markdown" }, { scope });
-    if (!result.ok) throw new Error(`Cinema delivery failed: ${result.reason}`);
-  };
-  const unregisterUpdates = registerTelegramUpdateHandler((update, execution) => {
-    const message = cinemaMessage(update);
-    if (!message) return "pass";
-    if (execution && !execution.isCurrent()) return "consume";
-    const command = message.text?.match(/^\/(\w+)(?:@getmanmaru_bot)?(?:\s+(.*))?$/is);
-    if (command?.[1].toLowerCase() === "stop" || command?.[1].toLowerCase() === "abort") {
-      generation++;
-      runtime.session.clearQueue();
-      runtime.session.abort().then(() => send("Остановлено. Очередь кино очищена.")).catch(error => log("cinema_error", { error: error.message }));
-      return "consume";
-    }
-    const acceptedGeneration = generation;
-    queue = queue.then(async () => {
-      if (acceptedGeneration !== generation) return;
-      const typing = setInterval(() => { sendTelegramChatAction("typing", { scope }).catch(() => {}); }, 4000);
-      try {
-        const text = message.text ?? (message.voice || message.audio
-          ? await transcribeTelegramVoiceMessage(message, runtime.services.cwd) : undefined);
-        if (acceptedGeneration !== generation) return;
-        if (!text) { await send("Отправь текст или голосовое. Остальные файлы пока доступны в теме AI."); return; }
-        if (command) {
-          switch (command[1].toLowerCase()) {
-            case "new": await runtime.newSession(); await send("Начата новая кино-сессия."); return;
-            case "compact": await runtime.session.compact(); await send("История кино сжата."); return;
-            case "model": {
-              if (command[2]) {
-                const split = command[2].trim().indexOf("/");
-                const provider = command[2].trim().slice(0, split), id = command[2].trim().slice(split + 1);
-                const model = runtime.services.modelRuntime.getModel(provider, id);
-                if (split < 1 || !model || !(await runtime.services.modelRuntime.getAvailable()).some(m => m.provider === provider && m.id === id)) { await send("Модель недоступна. Формат: /model provider/model"); return; }
-                await runtime.session.setModel(model, { persist: false });
-              }
-              await send(`Модель кино: ${runtime.session.model.provider}/${runtime.session.model.id}`); return;
-            }
-            default: await send(help); return;
-          }
-        }
-        log("cinema_turn_started", { sessionId: runtime.session.sessionId, user: message.from.id, topic: cinemaTarget.threadId });
-        await runtime.session.prompt(`user=${message.from.id} name=${JSON.stringify(message.from.first_name ?? "")}\n${text}`);
-        if (acceptedGeneration !== generation) return;
-        const last = runtime.session.messages.findLast(m => m.role === "assistant");
-        if (last?.errorMessage || last?.stopReason === "error") throw new Error("Cinema model request failed");
-        await send(runtime.session.getLastAssistantText() || "Ответ пуст. Повтори запрос.");
-        log("cinema_turn_completed", { sessionId: runtime.session.sessionId, topic: cinemaTarget.threadId });
-      } finally { clearInterval(typing); }
-    }).catch(async error => {
-      log("cinema_error", { error: error.message });
-      await send("Не удалось завершить запрос в «Кино». Подробности можно проверить в теме AI.").catch(() => {});
-    });
-    return "consume";
-  });
-  return async () => { generation++; mediaController.abort(); clearTimeout(mediaTimer); await mediaRun; unregisterUpdates(); unregisterTarget(); await runtime.dispose(); };
+  return async () => { mediaController.abort(); clearTimeout(mediaTimer); await mediaRun; };
 }

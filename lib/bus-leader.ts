@@ -162,6 +162,7 @@ export interface TelegramBusLeaderTargetProvisionerDeps<TContext> {
 }
 
 export interface TelegramBusFollowerTargetProvisionerDeps {
+  getForumTarget?: () => TelegramTarget | undefined;
   getAllowedUserId: () => number | undefined;
   topicTargetStore: Threads.TelegramTopicTargetStore;
   callApi: <TResponse>(
@@ -231,6 +232,7 @@ export interface TelegramBusLeaderApiProxyDeps {
 }
 
 export interface TelegramBusLeaderRuntimeAssemblyDeps<TContext> {
+  getForumTarget?: () => TelegramTarget | undefined;
   getThreadDisplayMode?: () => TelegramThreadDisplayMode;
   persistThreadDisplayMode?: (mode: TelegramThreadDisplayMode, isCurrent: () => boolean) => Promise<void>;
   onThreadDisplayChanged?: () => void;
@@ -444,6 +446,7 @@ export function createTelegramBusLeaderRuntimeAssembly<TContext>(
     deps.runtime.followerRegistry.list(),
   );
   const provisionerPorts = {
+    getForumTarget: deps.getForumTarget,
     getAllowedUserId: deps.getAllowedUserId,
     topicTargetStore: deps.topicTargetStore,
     callApi: deps.callApi,
@@ -748,6 +751,8 @@ export function createTelegramBusLeaderRuntimeAssembly<TContext>(
     getThreadDisplayMode: deps.getThreadDisplayMode,
     onFollowerRegistered: scheduleDisplay,
     provisionLeaderTarget: (ctx) => {
+      const forum = deps.getForumTarget?.();
+      if (forum) { deps.setLeaderTarget({ target: forum }); return Promise.resolve(); }
       const chatId = deps.getAllowedUserId();
       const provision = () => runWorkspaceOperation(
         {
@@ -933,6 +938,7 @@ export function createTelegramBusLeaderRuntimeAssembly<TContext>(
       operationKind: "workspace.publish-follower-registration", scopes: [{ kind: "profile" }],
     }, async () => {
       if (!input.target) { publish(); return; }
+      if (deps.getForumTarget?.()?.chatId === input.target.chatId) { publish(); return; }
       await deps.topicTargetStore.load();
       const binding = input.registration.cwd && input.registration.sessionId
         ? deps.topicTargetStore.getWorkspaceBindingByTarget(input.target, input.registration.sessionId) : undefined;
@@ -1165,6 +1171,14 @@ export function createTelegramBusFollowerTargetProvisioner(
     >
   >();
   return async (registration, options) => {
+    const forum = deps.getForumTarget?.();
+    if (forum) {
+      const target = registration.target;
+      if (!target || target.chatId !== forum.chatId || !Number.isSafeInteger(target.threadId) || target.threadId! <= 0) {
+        throw new Error("Forum follower requires an exact topic in the configured group.");
+      }
+      return { ...target, slot: registration.slot ?? "B" };
+    }
     if (options?.existingWorkspaceBindingOnly && !registration.cwd) {
       return undefined;
     }

@@ -8187,3 +8187,52 @@ test("Update worker contains state-observer and diagnostic-sink failures", async
   await worker.stop();
   assert.equal(worker.getState().phase, "stopped");
 });
+
+test("Forum leader forwards another topic to its registered native session", async () => {
+  const events: string[] = [];
+  const runtime = createTelegramPairedUpdateRuntime({
+    getAllowedUserId: () => 7,
+    getForumTarget: () => ({ chatId: 100, threadId: 16 }),
+    persistAllowedUserId: async () => true,
+    updateStatus: () => {},
+    getCurrentInstanceId: () => "leader",
+    getTargetOwnership: (target) =>
+      target.chatId === 100 && target.threadId === 42
+        ? { instanceId: "follower" }
+        : undefined,
+    foreignOwnedUpdateForwarder: {
+      forwardMessage: async ({ ownership }) => {
+        events.push(`forward:${ownership.instanceId}`);
+        return acceptedForeignUpdateSettlement();
+      },
+    },
+    removePendingMediaGroupMessages: () => {},
+    removeQueuedTelegramTurnsByMessageIds: () => 0,
+    applyQueuedTelegramTurnReactionByMessageId: () => false,
+    answerCallbackQuery: async () => {},
+    answerGuestQuery: async () => {},
+    handleAuthorizedTelegramCallbackQuery: async () => {},
+    sendTextReply: async () => undefined,
+    handleAuthorizedTelegramMessage: async () => {
+      events.push("message");
+    },
+    handleAuthorizedTelegramEditedMessage: () => {},
+    handleUnboundTelegramTopicMessage: async () => {
+      events.push("unbound-topic");
+    },
+  });
+
+  await runtime.handleUpdate(
+    {
+      message: {
+        chat: { id: 100, type: "supergroup" },
+        from: { id: 7, is_bot: false },
+        message_id: 11,
+        message_thread_id: 42,
+      },
+    },
+    TEST_CONTEXT,
+  );
+
+  assert.deepEqual(events, ["forward:follower"]);
+});

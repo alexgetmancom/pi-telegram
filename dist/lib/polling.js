@@ -441,6 +441,7 @@ export function createTelegramThreadCapabilityOrchestration(deps) {
         lifecycle,
         getAllowedUserId: deps.getAllowedUserId,
         callApi: deps.callApi,
+        getForumTarget: deps.getForumTarget,
         topicTargetStore: deps.topicTargetStore,
         ownsLock: deps.ownsLock,
         isFollowerRegistered: deps.isFollowerRegistered,
@@ -466,6 +467,7 @@ export function createTelegramThreadCapabilityOrchestration(deps) {
             lifecycle,
             getAllowedUserId: deps.getAllowedUserId,
             callApi: deps.callApi,
+            getForumTarget: deps.getForumTarget,
             topicTargetStore: deps.topicTargetStore,
             isBusRuntimeEnabled: deps.isBusRuntimeEnabled,
             isTopicModeUnavailableError: deps.isTopicModeUnavailableError,
@@ -488,6 +490,8 @@ export function createTelegramThreadCapabilityOrchestration(deps) {
     };
 }
 async function readTelegramThreadCapability(deps) {
+    if (deps.getForumTarget?.())
+        return true;
     const bot = await deps.callApi("getMe", {});
     if (bot.has_topics_enabled === true)
         return true;

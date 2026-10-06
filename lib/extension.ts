@@ -73,7 +73,7 @@ const telegramBusProtocolIdentity =
 
 // --- Extension Runtime ---
 
-export default function (pi: Pi.ExtensionAPI) {
+export default function (pi: Pi.ExtensionAPI, options: { forumTarget?: Config.TelegramForumTarget } = {}) {
   Skills.registerTelegramSkillDiscovery(pi);
   const piRuntime = Pi.createExtensionApiRuntimePorts(pi);
   const {
@@ -91,7 +91,7 @@ export default function (pi: Pi.ExtensionAPI) {
     Logging.createTelegramRuntimeDiagnosticsRuntime<Pi.ExtensionContext>({ sharedFile: true });
   const runtimeEvents = runtimeDiagnostics.events;
   const recordRuntimeEvent = runtimeDiagnostics.recordRuntimeEvent;
-  const configStore = Config.createTelegramConfigStore({ recordRuntimeEvent });
+  const configStore = Config.createTelegramConfigStore({ recordRuntimeEvent, forumTarget: options.forumTarget });
   const busProcessRuntime = Bus.createCurrentTelegramBusProcessRuntime({
     getActiveProfileName: configStore.getActiveProfileName,
     endpointLayout: "consolidated",
@@ -789,12 +789,6 @@ export default function (pi: Pi.ExtensionAPI) {
       getActiveTurnTarget: activeTurnRuntime.getTarget,
       getActiveGuestQueryId: activeTurnRuntime.getGuestQueryId,
     });
-  Inbound.bindTelegramVoiceInputRuntime({
-    downloadFile: downloadTelegramBridgeFile,
-    getHandlers: configStore.getInboundHandlers,
-    execCommand: CommandTemplates.execCommandTemplate,
-    getAllowedChatId() { return configStore.get().forumTarget?.chatId; },
-  });
   const deliveryGenerationSeed =
     Delivery.createTelegramDeliveryGenerationSeed(telegramInstanceId);
   const deliveryLifecycleRuntime =
@@ -1621,6 +1615,7 @@ export default function (pi: Pi.ExtensionAPI) {
   });
   const telegramBusLeaderRuntime =
     BusLeader.createTelegramBusLeaderRuntimeAssembly<Pi.ExtensionContext>({
+      getForumTarget() { return configStore.get().forumTarget; },
       runtime: {
         socketPath: getTelegramBusSocketPath,
         commitEndpointPublication(commit) {
@@ -1644,8 +1639,7 @@ export default function (pi: Pi.ExtensionAPI) {
         },
         isFollowerProcessAlive: Locks.isProcessAlive,
         afterFollowerPrune() { telegramSessionFolderSweeper.sweep(); },
-        shouldCleanupConfirmedDeadFollower:
-          configControls.resolveAutomaticThreadCleanupEnabled,
+        shouldCleanupConfirmedDeadFollower: configControls.resolveAutomaticThreadCleanupEnabled,
         recordFollowerMessageOwnership(record) {
           messageOwnershipRuntime.recordFollower(record);
         },
@@ -1743,6 +1737,7 @@ export default function (pi: Pi.ExtensionAPI) {
       Pi.ExtensionContext,
       Locks.TelegramLockEntry
     >({
+      getForumTarget() { return configStore.get().forumTarget; },
       state: telegramThreadCapabilityState,
       getAllowedUserId: configStore.getAllowedUserId,
       callApi: callTelegramApi,
@@ -1756,11 +1751,13 @@ export default function (pi: Pi.ExtensionAPI) {
       stopBusLeaderPolling: telegramBusLeaderRuntime.stopPolling,
       startLeaderHealth: telegramLeaderHealthRuntime.start,
       stopLeaderHealth: telegramLeaderHealthRuntime.stop,
-      registerFollowerWithLeader:
-        telegramBusFollowerRegistration.registerWithLeader,
+      registerFollowerWithLeader(ctx, owner) {
+        return telegramBusFollowerRegistration.registerWithLeader(ctx, owner, { target: configStore.get().forumTarget });
+      },
       restoreFollowerWithLeader(ctx, owner) {
         return telegramBusFollowerRegistration.registerWithLeader(ctx, owner, {
-          restoreWorkspace: true,
+          restoreWorkspace: !configStore.get().forumTarget,
+          target: configStore.get().forumTarget,
         });
       },
       hasRememberedWorkspaceBinding(ctx) {

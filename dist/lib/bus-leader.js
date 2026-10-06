@@ -138,6 +138,7 @@ export function createTelegramBusLeaderRuntimeAssembly(deps) {
     }) : undefined;
     const captureLiveBindingKeys = (bindings) => resolveTelegramLiveWorkspaceBindingKeys(bindings, deps.topicTargetStore.getActiveByInstanceId(deps.instanceId)?.target, deps.runtime.followerRegistry.list());
     const provisionerPorts = {
+        getForumTarget: deps.getForumTarget,
         getAllowedUserId: deps.getAllowedUserId,
         topicTargetStore: deps.topicTargetStore,
         callApi: deps.callApi,
@@ -410,6 +411,11 @@ export function createTelegramBusLeaderRuntimeAssembly(deps) {
         getThreadDisplayMode: deps.getThreadDisplayMode,
         onFollowerRegistered: scheduleDisplay,
         provisionLeaderTarget: (ctx) => {
+            const forum = deps.getForumTarget?.();
+            if (forum) {
+                deps.setLeaderTarget({ target: forum });
+                return Promise.resolve();
+            }
             const chatId = deps.getAllowedUserId();
             const provision = () => runWorkspaceOperation({
                 operationId: `leader-provision:${deps.instanceId}`,
@@ -570,6 +576,10 @@ export function createTelegramBusLeaderRuntimeAssembly(deps) {
                 publish();
                 return;
             }
+            if (deps.getForumTarget?.()?.chatId === input.target.chatId) {
+                publish();
+                return;
+            }
             await deps.topicTargetStore.load();
             const binding = input.registration.cwd && input.registration.sessionId
                 ? deps.topicTargetStore.getWorkspaceBindingByTarget(input.target, input.registration.sessionId) : undefined;
@@ -663,6 +673,14 @@ export function createTelegramBusFollowerTargetProvisioner(deps) {
     const getNowMs = deps.getNowMs ?? Date.now;
     const pendingRegistrations = new Map();
     return async (registration, options) => {
+        const forum = deps.getForumTarget?.();
+        if (forum) {
+            const target = registration.target;
+            if (!target || target.chatId !== forum.chatId || !Number.isSafeInteger(target.threadId) || target.threadId <= 0) {
+                throw new Error("Forum follower requires an exact topic in the configured group.");
+            }
+            return { ...target, slot: registration.slot ?? "B" };
+        }
         if (options?.existingWorkspaceBindingOnly && !registration.cwd) {
             return undefined;
         }

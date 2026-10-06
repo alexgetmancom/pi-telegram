@@ -77,6 +77,7 @@ export interface TelegramBusLeaderTargetProvisionerDeps<TContext> {
     getNowMs?: () => number;
 }
 export interface TelegramBusFollowerTargetProvisionerDeps {
+    getForumTarget?: () => TelegramTarget | undefined;
     getAllowedUserId: () => number | undefined;
     topicTargetStore: Threads.TelegramTopicTargetStore;
     callApi: <TResponse>(method: string, body: Record<string, unknown>) => Promise<TResponse>;
@@ -106,6 +107,7 @@ export interface TelegramBusLeaderApiProxyDeps {
     recoverStaleTargetError?: (apiBody: unknown, error: unknown) => Promise<unknown> | unknown;
 }
 export interface TelegramBusLeaderRuntimeAssemblyDeps<TContext> {
+    getForumTarget?: () => TelegramTarget | undefined;
     getThreadDisplayMode?: () => TelegramThreadDisplayMode;
     persistThreadDisplayMode?: (mode: TelegramThreadDisplayMode, isCurrent: () => boolean) => Promise<void>;
     onThreadDisplayChanged?: () => void;

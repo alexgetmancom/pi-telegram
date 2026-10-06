@@ -6,7 +6,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { connectCinema, createCinemaRuntime, cinemaTarget } from "./cinema.mjs";
+import { startMediaAutomation, createCinemaRuntime, cinemaTarget } from "./cinema.mjs";
 import {
   createAgentSessionFromServices,
   createAgentSessionRuntime,
@@ -17,6 +17,8 @@ import {
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const agentDir = getAgentDir();
+const cinemaMode = process.argv[2] === "cinema";
+if (process.argv[2] && !cinemaMode) throw new Error("Unknown session role");
 const cwd = process.cwd();
 const sessionDir = join(agentDir, "sessions", "pi-telegram");
 function log(event, detail = {}) {
@@ -27,7 +29,7 @@ function log(event, detail = {}) {
   process.stdout.write(`${line}\n`);
 }
 
-const runtime = await createAgentSessionRuntime(async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
+const runtime = cinemaMode ? await createCinemaRuntime(root, agentDir, sessionDir) : await createAgentSessionRuntime(async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
   const services = await createAgentSessionServices({
     cwd, agentDir,
     resourceLoaderOptions: { noContextFiles: true, appendSystemPrompt: [join(root, "agent", "AGENTS.md"), ...["alex.md", "maru.md"].map(name => readFileSync(join(homedir(), ".local/share/family", name), "utf8"))] },
@@ -76,10 +78,7 @@ async function bindSession(session) {
 runtime.setRebindSession(bindSession);
 await bindSession(runtime.session);
 
-const cinema = await createCinemaRuntime(root, agentDir, sessionDir);
-const disconnectCinema = connectCinema(cinema, log);
-log("cinema_started", { sessionId: cinema.session.sessionId, topic: cinemaTarget.threadId,
-  tools: cinema.session.getActiveToolNames() });
+const stopMedia = cinemaMode ? startMediaAutomation(log) : undefined;
 
 const server = createServer((request, response) => {
   if (request.url !== "/healthz") { response.writeHead(404).end(); return; }
@@ -87,16 +86,14 @@ const server = createServer((request, response) => {
   try {
     const state = JSON.parse(readFileSync(join(agentDir, "tmp", "pi-telegram", "state.json"), "utf8"));
     const profile = state.profiles?.default;
-    polling = profile?.runtime?.runtime?.pollingActive === true &&
-      profile?.transport?.pid === process.pid;
+    polling = profile?.transport?.pid === process.pid;
   } catch { /* Absent diagnostics mean not ready. */ }
-  response.writeHead(polling ? 200 : 503, { "content-type": "application/json" });
-  response.end(JSON.stringify({ polling, pid: process.pid, sessionId: runtime.session.sessionId,
-    provider: runtime.session.model?.provider, model: runtime.session.model?.id, busy: runtime.session.isStreaming,
-    cinema: { topic: cinemaTarget.threadId, sessionId: cinema.session.sessionId, tools: cinema.session.getActiveToolNames(),
-      provider: cinema.session.model?.provider, model: cinema.session.model?.id, busy: cinema.session.isStreaming } }));
+  const connected = polling || runtime.session.getActiveToolNames().includes("telegram_attach");
+  response.writeHead(connected ? 200 : 503, { "content-type": "application/json" });
+  response.end(JSON.stringify({ polling, connected, topic: cinemaMode ? cinemaTarget.threadId : 16, tools: runtime.session.getActiveToolNames(), pid: process.pid, sessionId: runtime.session.sessionId,
+    provider: runtime.session.model?.provider, model: runtime.session.model?.id, busy: runtime.session.isStreaming }));
 });
-server.listen(8186, "127.0.0.1");
+server.listen(cinemaMode ? 8187 : 8186, "127.0.0.1");
 
 let stopping = false;
 async function stop() {
@@ -104,7 +101,7 @@ async function stop() {
   stopping = true;
   server.close();
   unsubscribe?.();
-  try { await disconnectCinema(); await runtime.dispose(); log("stopped"); process.exit(0); }
+  try { await stopMedia?.(); await runtime.dispose(); log("stopped"); process.exit(0); }
   catch (error) { log("shutdown_error", { error: String(error) }); process.exit(1); }
 }
 process.once("SIGINT", stop);

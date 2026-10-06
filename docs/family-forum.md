@@ -1,16 +1,12 @@
 # Family forum deployment
 
-The forum has two independent native Pi sessions, served by one process and one Telegram poller. AI keeps the ordinary bridge and its shared controls. Cinema (topic 3) has its own history, prompt and model, with bounded `botflix` and `family_memory` tools. Both Alex and Maru share each topic's conversation; bot messages are ignored. General remains silent. The old Telegram BotFlix runs independently.
+The forum uses two native Pi instances with the same pi-telegram bridge. AI owns topic 16; Cinema owns topic 3. The native leader/follower bus keeps one Telegram poller and routes each topic's messages, callbacks, edits, reactions and media to its own session. Both participants share each topic; the two histories remain separate. General stays silent.
 
-Cinema accepts text and voice/audio requests, and `/start`, `/new`, `/compact`, `/stop`, `/model`; `/model provider/model` changes only Cinema's model. The bridge downloads voice and runs its existing configured STT pipeline before sending only text to Cinema. Other attachments and the ordinary inline settings menu remain in AI. Cinema also manages its own CLI subscriptions, upcoming release schedule, download history, day/week/month/last viewing reports, disk space and diagnostics. Adding a subscription starts from the latest listed episode and does not fetch its archive. The old bot subscriptions remain separate.
+Both topics use the normal buttons, settings/model menus, draft streaming, reply context, inbound voice/files and outbound voice/media. Voice transcription uses the existing local ASR. Optional voice replies use `scripts/speak.mjs` and local Piper; manual/text replies remain the default. Image understanding depends on the selected model's vision support.
 
-The host runs `botflix tick` once per minute without overlapping runs; subscriptions are checked every 15 minutes. CLI download completion/errors and low-disk warnings go only to Cinema through the bridge delivery API. Indexed items get a poster and Jellyfin button. A weekly report is scheduled for Sunday after 21:00 Moscow while this host runs. The native Pi sessions are not used to hold operational history: CLI state/outgoing events are private JSON at `~/.local/share/botflix/state.json`. Ambiguous or interrupted delivery remains claimed for operator review (`botflix events`, `retry-event ID`), avoiding repeated sends.
+Cinema enables botflix, family_memory, web_search, web_fetch and telegram_attach. Attachments are restricted to posters created by its botflix tool. Web search uses direct Brave HTML requests, matching the AI topic’s existing curl-based search; public page reading also uses direct HTTPS requests; no browser administration, cookies, shell, SSH or arbitrary host-file tools are exposed. Family memory can edit exactly alex.md, maru.md and watchlist.md. They are refreshed before every model turn. Media subscriptions and notifications remain unchanged.
 
-Cinema has no shell, arbitrary filesystem tools, browser authentication, local torrent file input, poster file writes or file deletion. Download URLs are limited to the configured tracker domains. Removing a torrent preserves its files. BotFlix's service credentials remain outside model context.
-
-The trusted host registers Cinema's exact forum destination with `registerTelegramDeliveryTarget` from the delivery API and consumes its human text updates through the public update-handler API. It neither starts another poller nor grants a model a destination-registration tool. Disposing the host revokes that delivery target.
-
-Before every Cinema model request, one trusted Pi context hook re-reads `alex.md`, `maru.md` and `watchlist.md` from the private family directory. The `family_memory` tool can read and atomically update exactly these three files. A write requires the SHA-256 from a fresh read, preserves permissions 0600, verifies the result and refuses changed contents. No other paths are accessible. Profile edits are visible on the next turn and shared with AI and the daily reflection.
+The shared Telegram profile keeps its AI forumTarget. Cinema supplies its own fixed target at runtime without overwriting that profile when settings change. Configured forum topics are operator-owned and are never automatically deleted on shutdown. `/new` affects only the topic's native session.
 
 ## Install on the host
 
@@ -35,16 +31,18 @@ Set Pi's `defaultProvider` to `deepseek` and `defaultModel` to `deepseek-flash`.
 
 ```sh
 mkdir -p ~/.config/systemd/user
-cp systemd/pi-telegram.service ~/.config/systemd/user/
+cp systemd/pi-telegram.service systemd/pi-telegram-cinema.service ~/.config/systemd/user/
 sudo loginctl enable-linger "$USER"
 systemctl --user daemon-reload
 systemctl --user enable --now pi-telegram
+systemctl --user enable --now pi-telegram-cinema
 curl --fail http://127.0.0.1:8186/healthz
+curl --fail http://127.0.0.1:8187/healthz
 ```
 
 `/start` opens the menu; `/model` selects the model; `/compact` summarizes context; `/new` starts a fresh shared session with native confirmation and retains this topic. A model switch continues the same native conversation. Older sessions remain on disk.
 
-Runtime instructions are in [agent/AGENTS.md](../agent/AGENTS.md) for AI and [agent/CINEMA.md](../agent/CINEMA.md) for Cinema. Both native histories live under `~/.pi/agent/sessions/pi-telegram`, isolated by session CWD (home for AI, `~/projects/home/cli-botlix` for Cinema), and resume after restart. `/new` affects only its topic. Diagnose with `journalctl --user -u pi-telegram`; health at `http://127.0.0.1:8186/healthz` includes both session IDs and Cinema's active tools. Interrupted in-memory queued work is not replayed; resend it.
+Runtime instructions are in [agent/AGENTS.md](../agent/AGENTS.md) for AI and [agent/CINEMA.md](../agent/CINEMA.md) for Cinema. Both native histories live under `~/.pi/agent/sessions/pi-telegram`, isolated by session CWD (home for AI, `~/projects/home/cli-botlix` for Cinema), and resume after restart. `/new` affects only its topic. Diagnose with `journalctl --user -u pi-telegram`; health at ports 8186 (AI) and 8187 (Cinema) includes each session ID, tools and transport role. Interrupted in-memory queued work is not replayed; resend it.
 
 ## Private family memory and daily reflection
 
@@ -58,4 +56,4 @@ Reflection can update only `alex.md`, `maru.md` and `watchlist.md`; it cannot re
 
 For a live test, run `node scripts/reflect.mjs --date YYYY-MM-DD` with the service environment loaded. An unfinished day is marked partial and will be reviewed again by the scheduled run. `--inspect` lists the selected source entries without calling the model or changing memory. After setup, check `systemctl --user list-timers pi-telegram-reflection.timer`.
 
-To update, pull `main`, run `npm ci` and `npm run build`, then `systemctl --user restart pi-telegram`. Keep this as the deployment path; GitHub Actions validates the fork.
+To update, pull `main`, run `npm ci` and `npm run build`, then `systemctl --user restart pi-telegram pi-telegram-cinema`. Keep this as the deployment path; GitHub Actions validates the fork.

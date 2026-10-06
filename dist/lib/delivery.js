@@ -9,17 +9,6 @@ import { withTelegramReplyParameters, renderTelegramMessage, } from "./replies.j
 import { areTelegramTargetsEqual as areDeliveryTargetsEqual, getTelegramTargetThreadParams, } from "./target.js";
 import { getTelegramApiRetryAfterMs, isRetryableTelegramApiError, isTelegramApiCommitUnknownError, isTelegramMessageUnavailableError, } from "./telegram-api.js";
 const TELEGRAM_DELIVERY_RUNTIME_KEY = "__piTelegramDeliveryRuntime__";
-const companionTargets = new Set();
-/** Trusted companion hosts explicitly authorize their own forum delivery target. */
-export function registerTelegramDeliveryTarget(target) {
-    if (!Number.isSafeInteger(target.chatId) || target.chatId >= 0 ||
-        !Number.isSafeInteger(target.threadId) || target.threadId <= 0) {
-        throw new Error("Companion delivery requires an exact forum topic.");
-    }
-    const registered = Object.freeze({ ...target });
-    companionTargets.add(registered);
-    return () => { companionTargets.delete(registered); };
-}
 class TelegramDeliveryTransportGenerationError extends Error {
     constructor() {
         super("Telegram Delivery transport generation is no longer active.");
@@ -103,7 +92,7 @@ export function createTelegramDeliveryTargetPolicyRuntime(deps) {
                 allowedChatId: deps.getAllowedChatId(),
                 followerTarget: deps.getFollowerTarget(),
                 leaderTarget: deps.getLeaderTarget(),
-                liveTargets: [...deps.listThreadRecords().map((record) => record.target), ...companionTargets],
+                liveTargets: deps.listThreadRecords().map((record) => record.target),
             };
         },
         getActiveTurnTarget() {

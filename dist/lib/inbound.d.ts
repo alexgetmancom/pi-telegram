@@ -4,17 +4,6 @@
  * Owns MIME/type matching, command-template execution, fallback handling, and prompt injection before prompt enqueueing
  */
 import { type CommandTemplateConfig, type CommandTemplateObjectConfig } from "./command-templates.ts";
-import { type DownloadTelegramMessageFilesDeps, type TelegramMediaMessage } from "./media.ts";
-declare let companionVoiceRuntime: {
-    downloadFile: DownloadTelegramMessageFilesDeps["downloadFile"];
-    getHandlers(): TelegramInboundHandlerConfig[] | undefined;
-    execCommand: TelegramInboundHandlerRuntimeDeps<unknown>["execCommand"];
-    getAllowedChatId(): number | undefined;
-} | undefined;
-/** @internal The bridge supplies its existing download and configured STT pipeline. */
-export declare function bindTelegramVoiceInputRuntime(runtime: NonNullable<typeof companionVoiceRuntime>): void;
-/** Transcribe an admitted forum voice/audio message without giving its agent file tools. */
-export declare function transcribeTelegramVoiceMessage(message: TelegramMediaMessage, cwd: string): Promise<string>;
 type TelegramInboundCommandTemplateConfig = string | CommandTemplateObjectConfig;
 export interface TelegramInboundHandlerConfig {
     match?: string | string[];

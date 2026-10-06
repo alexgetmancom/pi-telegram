@@ -226,6 +226,7 @@ test("Domain test filenames mirror their owning lib domain", () => {
     "journal-downgrade",
     "process-shutdown",
     "reflection",
+    "sdk-forum-session",
     "public-api",
   ]);
   const unmirrored = readdirSync(join(PROJECT_ROOT, "tests"))

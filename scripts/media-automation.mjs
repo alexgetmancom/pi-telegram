@@ -1,8 +1,9 @@
 /** Existing BotFlix CLI subscriptions and Telegram notifications. */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { sendTelegramView, sendTelegramPhoto } from "../dist/api/delivery.js";
 const executeFile = promisify(execFile);
 const cinemaTarget = { chatId: -1003985826484, threadId: 3 };

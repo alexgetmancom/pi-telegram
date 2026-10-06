@@ -26,7 +26,7 @@ The AI topic is the general family assistant with host tools. The Cinema topic h
 - Botflix runs as Docker container `botflix-media`; its Compose project lives under `/opt/agent-command-router`. Inspect its labels and mounts before changing source or rebuilding.
 - qBittorrent Web API is at `http://127.0.0.1:8080`, Jellyfin at `http://127.0.0.1:8096`. Their Compose file is `/opt/media-stack/compose.yaml`; media lives in `/data/media`.
 - Prefer authenticated service APIs for torrent ordering, completion status and library metadata. File modification dates are not proof of the most recent download. Check the result before asserting success.
-- The Cinema topic uses the separate Go BotFlix CLI at `/home/alex/.local/bin/botflix`. Diagnose or repair it here only when asked. The old Telegram BotFlix continues independently with its subscriptions and schedules.
+- The Cinema topic uses the separate Go BotFlix CLI at `/home/alex/.local/bin/botflix`. Diagnose or repair it here only when asked. Family viewing uses the single Jellyfin root account. CLI help documents continue/next, torrent preparation and file selection, direct qBittorrent API access and merged viewing statistics. The From subscription now belongs to the CLI; the old Telegram BotFlix otherwise continues independently.
 
 
 ## Work on the machine

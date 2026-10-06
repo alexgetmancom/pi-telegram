@@ -54,10 +54,12 @@ function isTelegramFollowerSessionHandoffFresh(handoff, options = {}) {
     const ttlMs = options.ttlMs ?? TELEGRAM_FOLLOWER_SESSION_HANDOFF_TTL_MS;
     return handoff.pid === pid && nowMs - handoff.createdAtMs <= ttlMs;
 }
-export function createTelegramManualFollowerProfileKeyResolver(input) {
+export function createTelegramFollowerProfileKeyResolver(input) {
     return () => Threads.getTelegramThreadOwnerKey({
         kind: "manual-follower",
-        instanceId: input.manualFollowerOwnerId,
+        instanceId: input.forumTarget
+            ? `forum:${input.forumTarget.chatId}:${input.forumTarget.threadId}`
+            : input.manualFollowerOwnerId,
         telegramProfile: input.getActiveProfileName(),
     });
 }

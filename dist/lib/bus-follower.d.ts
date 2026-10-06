@@ -171,9 +171,13 @@ export interface TelegramBusFollowerRegistrationRuntimeDeps<TContext extends {
     onRegistered?: (ctx: TContext) => Promise<void> | void;
     onDisplayTitleChanged?: (ctx: TContext) => void;
 }
-export declare function createTelegramManualFollowerProfileKeyResolver(input: {
+export declare function createTelegramFollowerProfileKeyResolver(input: {
     getActiveProfileName: () => string | undefined;
     manualFollowerOwnerId: string;
+    forumTarget?: {
+        chatId: number;
+        threadId: number;
+    };
 }): () => string;
 export interface TelegramBusFollowerElection {
     expectedOwner?: TelegramLockEntry;

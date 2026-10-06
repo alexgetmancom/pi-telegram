@@ -100,9 +100,10 @@ export default function (pi, options = {}) {
         },
     });
     const getTelegramActiveProfileKey = Config.createTelegramActiveProfileKeyGetter(configStore);
-    const getTelegramManualFollowerProfileKey = BusFollower.createTelegramManualFollowerProfileKeyResolver({
+    const getTelegramManualFollowerProfileKey = BusFollower.createTelegramFollowerProfileKeyResolver({
         getActiveProfileName: configStore.getActiveProfileName,
         manualFollowerOwnerId: telegramManualFollowerOwnerId,
+        forumTarget: options.forumTarget,
     });
     const telegramBusAuthSecret = Bus.createTelegramBusAuthSecret();
     const telegramBusFollowerControlState = BusFollower.createTelegramBusFollowerControlState();

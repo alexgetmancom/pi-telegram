@@ -21,9 +21,9 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const agentDir = getAgentDir();
 const role = process.argv[2] ?? "ai";
 const sessions = {
-  ai: { cwd: process.cwd(), topic: 16, port: 8186, notes: ["watchlist.md"] },
-  cinema: { cwd: join(homedir(), "projects/home/cli-botlix"), topic: 3, port: 8187, instructions: "CINEMA.md", notes: ["watchlist.md"], startAutomation: startMediaAutomation },
-  health: { cwd: join(homedir(), ".local/share/family/health"), topic: 359, port: 8188, instructions: "HEALTH.md", notes: ["health/alex.md", "health/maru.md", "health/notes.md"], startAutomation: startHealthAutomation },
+  ai: { cwd: process.cwd(), topic: 16, port: 8186, instructions: "ai/AGENTS.md", notes: ["watchlist.md"] },
+  cinema: { cwd: join(homedir(), "projects/home/cli-botlix"), topic: 3, port: 8187, instructions: "cinema/AGENTS.md", notes: ["watchlist.md"], startAutomation: startMediaAutomation },
+  health: { cwd: join(homedir(), ".local/share/family/health"), topic: 359, port: 8188, instructions: "health/AGENTS.md", notes: ["health/alex.md", "health/maru.md", "health/notes.md"], startAutomation: startHealthAutomation },
 };
 const sessionConfig = Object.hasOwn(sessions, role) ? sessions[role] : undefined;
 if (!sessionConfig || process.argv[3]) throw new Error("Unknown session role: use ai, cinema or health");
@@ -43,7 +43,7 @@ const runtime = await createAgentSessionRuntime(async ({ cwd, agentDir, sessionM
     cwd, agentDir,
     resourceLoaderOptions: {
       noExtensions: true, noContextFiles: true,
-      appendSystemPrompt: [join(root, "skills/telegram-bridge/SKILL.md"), join(root, "agent/TELEGRAM.md"), join(root, "agent/AGENTS.md"), ...(sessionConfig.instructions ? [join(root, "agent", sessionConfig.instructions)] : [])],
+      appendSystemPrompt: [join(root, "skills/telegram-bridge/SKILL.md"), join(root, "agent/TELEGRAM.md"), join(root, "agent", sessionConfig.instructions)],
       extensionFactories: [pi => telegram(pi, { forumTarget }), pi => {
         pi.on("before_agent_start", event => ({ systemPrompt: event.systemPrompt + "\n<family_preferences>\n" +
           ["alex.md", "maru.md", ...sessionConfig.notes].map(name => `${name}:\n${readFileSync(join(homedir(), ".local/share/family", name), "utf8")}`).join("\n\n") +
@@ -107,7 +107,7 @@ const server = createServer((request, response) => {
   } catch { /* Absent diagnostics mean not ready. */ }
   const connected = polling || runtime.session.getActiveToolNames().includes("telegram_attach");
   response.writeHead(connected ? 200 : 503, { "content-type": "application/json" });
-  response.end(JSON.stringify({ polling, connected, topic: forumTarget.threadId, tools: runtime.session.getActiveToolNames(), pid: process.pid, sessionId: runtime.session.sessionId,
+  response.end(JSON.stringify({ polling, connected, topic: forumTarget.threadId, role, instructions: sessionConfig.instructions, tools: runtime.session.getActiveToolNames(), pid: process.pid, sessionId: runtime.session.sessionId,
     provider: runtime.session.model?.provider, model: runtime.session.model?.id, busy: runtime.session.isStreaming }));
 });
 server.listen(sessionConfig.port, "127.0.0.1");

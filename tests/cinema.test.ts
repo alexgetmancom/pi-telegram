@@ -1,7 +1,7 @@
 /** Media notification rendering regression. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Script, createContext } from "node:vm";
@@ -35,7 +35,7 @@ test("Media automation sends a poster, acknowledges only delivery and cleans tem
         return { stdout: JSON.stringify({ ok: true, data: args[0] === "events" ? [event] : {} }) };
       } },
       "node:util": { promisify: (fn: unknown) => fn },
-      "node:fs": { existsSync, mkdtempSync, rmSync },
+      "node:fs": { existsSync, mkdtempSync, mkdirSync, rmSync },
       "node:path": { join },
       "node:os": { homedir, tmpdir },
       "../dist/api/delivery.js": {
@@ -62,9 +62,9 @@ test("family SDK host keeps Health isolated with full tools and role-specific au
       ? `const ${names} = imports[${JSON.stringify(module)}];`
       : `const ${names} = imports[${JSON.stringify(module)}].default;`);
   const expected = [
-    { role: undefined, topic: 16, port: 8186, cwd: "/home/alex", agent: undefined, automation: false },
-    { role: "cinema", topic: 3, port: 8187, cwd: "/home/alex/projects/home/cli-botlix", agent: "CINEMA.md", automation: true },
-    { role: "health", topic: 359, port: 8188, cwd: "/home/alex/.local/share/family/health", agent: "HEALTH.md", automation: true },
+    { role: undefined, topic: 16, port: 8186, cwd: "/home/alex", agent: "ai/AGENTS.md", automation: false },
+    { role: "cinema", topic: 3, port: 8187, cwd: "/home/alex/projects/home/cli-botlix", agent: "cinema/AGENTS.md", automation: true },
+    { role: "health", topic: 359, port: 8188, cwd: "/home/alex/.local/share/family/health", agent: "health/AGENTS.md", automation: true },
   ];
   for (const target of expected) {
     const calls: { cwd?: string; topic?: number; port?: number; instructions?: string[]; automation?: boolean; prompt?: string; healthFiles?: string[] } = { healthFiles: [] };
@@ -103,7 +103,7 @@ test("family SDK host keeps Health isolated with full tools and role-specific au
     before[0]?.({ systemPrompt: "test" });
     assert.equal(calls.cwd, target.cwd); assert.equal(calls.topic, target.topic); assert.equal(calls.port, target.port);
     assert.equal(Boolean(calls.automation), target.automation); assert.equal(calls.prompt, "/telegram-connect");
-    assert.equal(calls.instructions?.some(path => path.endsWith(target.agent ?? "NO_EXTRA_AGENT")), Boolean(target.agent));
+    assert.deepEqual(Array.from(calls.instructions?.filter(path => path.includes("/agent/")) ?? []), [`/repo/agent/TELEGRAM.md`, `/repo/agent/${target.agent}`]);
     assert.equal(calls.healthFiles?.some(path => path.endsWith("health/alex.md")), target.role === "health");
     assert.equal(calls.healthFiles?.some(path => path.endsWith("watchlist.md")), target.role !== "health");
   }
@@ -144,4 +144,58 @@ test("Health automation preserves partial CLI results and never repeats uncertai
   assert.equal(JSON.parse(receipt!).state, "uncertain");
   scheduled.shift()?.(); await new Promise(resolve => setImmediate(resolve));
   await stop(); assert.equal(sends, 1); assert.deepEqual(commands, ["tick", "compare", "tick"]);
+});
+
+
+test("Real SDK new, resume and fork preserve the sole role document for all topics", async () => {
+ const sdk = await import("@earendil-works/pi-coding-agent");
+ const source = readFileSync(new URL("../scripts/serve.mjs", import.meta.url),"utf8")
+  .replace(/^#!.*\n/u, "")
+  .replace(/^import ([\s\S]*?) from "([^"]+)";/gm, (_all,names:string,module:string)=>names.trim().startsWith("{") ? `const ${names} = imports[${JSON.stringify(module)}];` : `const ${names} = imports[${JSON.stringify(module)}].default;`);
+ const home = mkdtempSync(join(tmpdir(),"family-roles-"));
+ try {
+  for(const role of ["ai","cinema","health"]) {
+   const cwd = role==="ai" ? home : role==="cinema" ? join(home,"projects/home/cli-botlix") : join(home,".local/share/family/health");
+   mkdirSync(cwd,{recursive:true});
+   const agentDir = join(home,"agent"); mkdirSync(agentDir,{recursive:true});
+   const family=join(home,".local/share/family");mkdirSync(join(family,"health"),{recursive:true});
+   for(const name of ["alex.md","maru.md","watchlist.md","health/alex.md","health/maru.md","health/notes.md"]) writeFileSync(join(family,name),"fixture family data");
+   const bundles:string[][]=[];
+   let runtime:any;
+   const context=createContext({URL,Object,JSON,AbortController,process:{argv:["node","serve.mjs",role],cwd:()=>home,env:{},stdout:{write(){}},once(){}},imports:{
+    "node:http":{createServer:()=>({listen(){},close(){}})},
+    "node:fs":{existsSync,readFileSync,writeFileSync},
+    "node:path":await import("node:path"),"node:os":{homedir:()=>home},"node:url":await import("node:url"),
+    "./health-automation.mjs":{startHealthAutomation:()=>async()=>{}},"./media-automation.mjs":{startMediaAutomation:()=>async()=>{}},
+    "../dist/index.js":{default:()=>{}},
+    "@earendil-works/pi-coding-agent":{
+     getAgentDir:()=>agentDir,SessionManager:sdk.SessionManager,
+     createAgentSessionRuntime:async(factory:any,options:any)=>{ runtime=await sdk.createAgentSessionRuntime(factory,options);return runtime; },
+     createAgentSessionServices:async(config:any)=>{
+      const paths=[...config.resourceLoaderOptions.appendSystemPrompt];bundles.push(paths);
+      const hooks:Function[]=[];
+      for(const factory of config.resourceLoaderOptions.extensionFactories)factory({on:(name:string,fn:Function)=>{if(name==="before_agent_start")hooks.push(fn);}});
+      return {cwd:config.cwd,agentDir,diagnostics:[],hooks,systemPrompt:paths.map((path:string)=>readFileSync(path,"utf8")).join("\n"),resourceLoader:{getSkills:()=>({skills:[]})}};
+     },
+     createAgentSessionFromServices:async({services,sessionManager}:any)=>{
+      const session={sessionManager,get sessionId(){return sessionManager.getSessionId();},get sessionFile(){return sessionManager.getSessionFile();},extensionRunner:{hasHandlers:()=>false,emit:async()=>{}},model:{provider:"fixture",id:"fixture"},isStreaming:false,getActiveToolNames:()=>["read","bash","edit","write","telegram_attach"],bindExtensions:async()=>{},subscribe:()=>()=>{},abort:async()=>{},dispose(){},refreshContext(){},prompt:async()=>{
+       let system=services.systemPrompt;for(const hook of services.hooks)system=hook({systemPrompt:system}).systemPrompt;
+       assert.match(system,/fixture family data/);assert.ok(system.includes(readFileSync(new URL(`../agent/${role}/AGENTS.md`,import.meta.url),"utf8")));
+      }};
+      return {session,extensionsResult:{errors:[],extensions:[{commands:new Map([["telegram-connect",{}]])}]}};
+     },
+    },
+   }});
+   const url=new URL("../scripts/serve.mjs",import.meta.url).href;
+   await new Script(`(async()=>{${source.replaceAll("import.meta.url",JSON.stringify(url))}})()`).runInContext(context);
+   const initial=runtime.session.sessionFile;
+   await runtime.newSession();await runtime.session.prompt("capabilities");
+   const question=runtime.session.sessionManager.appendMessage({role:"user",content:[{type:"text",text:"capabilities"}],timestamp:Date.now()});
+   await runtime.fork(question,{position:"at"});await runtime.session.prompt("capabilities");
+   await runtime.switchSession(initial);await runtime.session.prompt("capabilities");
+   assert.equal(bundles.length,4);
+   for(const paths of bundles)assert.deepEqual(paths.filter(path=>path.endsWith("AGENTS.md")),[new URL(`../agent/${role}/AGENTS.md`,import.meta.url).pathname]);
+   await runtime.dispose();
+  }
+ } finally {rmSync(home,{recursive:true,force:true});}
 });

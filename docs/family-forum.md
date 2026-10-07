@@ -44,7 +44,7 @@ curl --fail http://127.0.0.1:8188/healthz
 
 `/start` opens the menu; `/model` selects the model; `/compact` summarizes context; `/new` starts a fresh shared session with native confirmation and retains this topic. A model switch continues the same native conversation. Older sessions remain on disk.
 
-Runtime instructions are in [agent/AGENTS.md](../agent/AGENTS.md) for AI and [agent/CINEMA.md](../agent/CINEMA.md) for Cinema and [agent/HEALTH.md](../agent/HEALTH.md) for Health. All native histories live under `~/.pi/agent/sessions/pi-telegram`, isolated by session CWD (home for AI, `~/projects/home/cli-botlix` for Cinema, `~/.local/share/family/health` for Health), and resume after restart. `/new` affects only its topic. Diagnose with `journalctl --user -u pi-telegram`; health at ports 8186 (AI), 8187 (Cinema) and 8188 (Health) includes each session ID, tools and transport role. Interrupted in-memory queued work is not replayed; resend it.
+Runtime instructions are in [AI AGENTS.md](../agent/ai/AGENTS.md) for AI and [Cinema AGENTS.md](../agent/cinema/AGENTS.md) for Cinema and [HP AGENTS.md](../agent/health/AGENTS.md) for Health. All native histories live under `~/.pi/agent/sessions/pi-telegram`, isolated by session CWD (home for AI, `~/projects/home/cli-botlix` for Cinema, `~/.local/share/family/health` for Health), and resume after restart. `/new` affects only its topic. Diagnose with `journalctl --user -u pi-telegram`; health at ports 8186 (AI), 8187 (Cinema) and 8188 (Health) includes each session ID, tools and transport role. Interrupted in-memory queued work is not replayed; resend it.
 
 ## Private family memory and daily reflection
 
@@ -114,3 +114,5 @@ health records into general profiles or watchlist. All three sessions keep the
 same tools and Telegram controls. Cinema runs media tick; Health runs its own CLI tick.
 
 Health now uses the Go CLI `/home/alex/.local/bin/health`. The old Mi Band container is stopped with restart disabled; history remains in its existing SQLite files and CLI credentials live under `~/.config/health`. Do not run both synchronizers. Commands, source limitations and weekly delivery receipts are described in [Health CLI](./health-cli.md).
+
+Each topic loads exactly its own standalone AGENTS.md; AI instructions are never loaded into Cinema or HP. The native runtime factory applies this same selection on startup, new, resume and fork, and reload refreshes the selected resource. Only Telegram transport rules and private family data are shared. Health diagnostics expose the configured role and instruction path.

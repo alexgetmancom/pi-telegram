@@ -1,6 +1,6 @@
 /** Regressions for daily Moscow boundaries, all-session collection, redaction and non-destructive memory publication. */
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, readdir, rm } from "node:fs/promises";
+import { mkdir, stat, mkdtemp, readFile, writeFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -54,18 +54,33 @@ test("Reflection collects messages from every session by entry date, excludes th
 test("Reflection rejects unknown files and concurrent changes before writing any memory", async () => {
   const dir = await mkdtemp(join(tmpdir(), "reflection-save-"));
   try {
-    const before = Object.fromEntries(["alex.md", "maru.md", "watchlist.md"].map(name => [name, "original " + name]));
+    const before = Object.fromEntries(["alex.md", "maru.md", "watchlist.md", "health/alex.md", "health/alex-training.md", "health/alex-nutrition.md", "health/maru.md", "health/maru-training.md", "health/maru-nutrition.md", "health/notes.md"].map(name => [name, "original " + name]));
+    await mkdir(join(dir, "health"));
+    const review = { healthProposals: {}, healthReport: "Новых подтверждённых фактов HP нет." };
     for (const [name, text] of Object.entries(before)) await writeFile(join(dir, name), text);
     const day = reflectionWindow("2026-10-05", new Date("2026-10-06T00:00:00Z"));
-    await assert.rejects(saveReflection(dir, before, { updates: { "../AGENTS.md": "bad" }, report: "report" }, day));
-    await assert.rejects(saveReflection(dir, before, { updates: { "network-issues.md": "technical analysis" }, report: "report" }, day));
+    await assert.rejects(saveReflection(dir, before, { ...review, updates: { "../AGENTS.md": "bad" }, report: "report" }, day));
+    await assert.rejects(saveReflection(dir, before, { ...review, updates: { "network-issues.md": "technical analysis" }, report: "report" }, day));
     await writeFile(join(dir, "maru.md"), "live edit");
-    await assert.rejects(saveReflection(dir, before, { updates: { "alex.md": "new" }, report: "report" }, day));
+    await assert.rejects(saveReflection(dir, before, { ...review, updates: { "alex.md": "new" }, report: "report" }, day));
     assert.equal(await readFile(join(dir, "alex.md"), "utf8"), before["alex.md"]);
     before["maru.md"] = "live edit";
-    assert.deepEqual(await saveReflection(dir, before, { updates: { "alex.md": "confirmed fact" }, report: "saved from source#entry" }, day), ["alex.md"]);
+    assert.deepEqual(await saveReflection(dir, before, { ...review, updates: { "alex.md": "confirmed fact" }, report: "saved from source#entry" }, day), ["alex.md"]);
     assert.equal(await readFile(join(dir, "alex.md"), "utf8"), "confirmed fact");
     assert.match(await readFile(join(dir, "reflections/2026-10-05.md"), "utf8"), /gpt-6-luna · max/);
     assert.ok(!(await readdir(dir)).some(name => name.endsWith(".tmp")));
+    await assert.rejects(saveReflection(dir, before, { ...review, updates: { "health/alex.md": "forbidden write" }, report: "report" }, day));
+    await assert.rejects(saveReflection(dir, before, { ...review, updates: {}, report: "report", healthProposals: { "../health/alex.md": "bad" } }, day));
+    await assert.rejects(saveReflection(dir, before, { ...review, updates: {}, report: "report", healthProposals: { "alex.md": "wrong domain" } }, day));
+    before["alex.md"] = "confirmed fact";
+    const result = { updates: {}, report: "No general changes", healthProposals: { "health/alex-training.md": "New confirmed workout source#entry" }, healthReport: "Workout reported by Alex source#entry" };
+    assert.deepEqual(await saveReflection(dir, before, result, day), []);
+    for (const [name, text] of Object.entries(before)) assert.equal(await readFile(join(dir, name), "utf8"), text);
+    const report = join(dir, "reflections/health/2026-10-05.md");
+    assert.match(await readFile(report, "utf8"), /New confirmed workout source#entry/);
+    assert.equal((await stat(report)).mode & 0o777, 0o600);
+    assert.equal((await stat(join(dir, "reflections/health"))).mode & 0o777, 0o700);
+    await writeFile(join(dir, "health/alex-training.md"), "live health edit");
+    await assert.rejects(saveReflection(dir, before, result, day), /Memory changed/);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

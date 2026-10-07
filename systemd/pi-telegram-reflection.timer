@@ -1,8 +1,8 @@
 [Unit]
-Description=Reflect on yesterday's family Telegram sessions at 03:00 Moscow
+Description=Reflect on yesterday's family Telegram sessions at 07:00 Istanbul
 
 [Timer]
-OnCalendar=*-*-* 03:00:00 Europe/Moscow
+OnCalendar=*-*-* 07:00:00 Europe/Istanbul
 AccuracySec=1s
 Persistent=true
 Unit=pi-telegram-reflection.service

@@ -8,6 +8,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createAgentSession, DefaultResourceLoader, getAgentDir, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 
 const names = ["alex.md", "maru.md", "watchlist.md"];
+const healthNames = ["health/alex.md", "health/alex-training.md", "health/alex-nutrition.md",
+  "health/maru.md", "health/maru-training.md", "health/maru-nutrition.md", "health/notes.md"];
 
 export function reflectionWindow(date, now = new Date()) {
   date ??= new Date(now.getTime() + 3 * 3600000 - 86400000).toISOString().slice(0, 10);
@@ -54,17 +56,27 @@ export async function collectTranscript(directory, window) {
 }
 
 export async function saveReflection(directory, before, result, window) {
-  if (!result || typeof result.report !== "string" || !result.report.trim() || result.report.length > 60000 || !result.updates || typeof result.updates !== "object" || Array.isArray(result.updates)) throw new Error("Reflection must return {updates, report}");
+  if (!result || typeof result.healthReport !== "string" || !result.healthReport.trim() || result.healthReport.length > 60000 ||
+      !result.healthProposals || typeof result.healthProposals !== "object" || Array.isArray(result.healthProposals) || typeof result.report !== "string" || !result.report.trim() || result.report.length > 60000 || !result.updates || typeof result.updates !== "object" || Array.isArray(result.updates)) throw new Error("Reflection must return {updates, report, healthProposals, healthReport}");
   for (const [name, text] of Object.entries(result.updates)) {
     if (!names.includes(name) || typeof text !== "string" || !text.trim() || text.length > (name === "alex.md" || name === "maru.md" ? 6000 : 60000)) throw new Error(`Invalid memory update: ${name}`);
   }
-  for (const name of names) {
+  for (const [name, text] of Object.entries(result.healthProposals)) {
+    if (!healthNames.includes(name) || typeof text !== "string" || !text.trim() || text.length > 60000) throw new Error(`Invalid health proposal: ${name}`);
+  }
+  for (const name of [...names, ...healthNames]) {
     if (await readFile(join(directory, name), "utf8") !== before[name]) throw new Error(`Memory changed during reflection: ${name}; rerun without overwriting the participant's edit`);
   }
   const reports = join(directory, "reflections");
   await mkdir(reports, { recursive: true, mode: 0o700 });
+  const healthReports = join(reports, "health");
+  await mkdir(healthReports, { recursive: true, mode: 0o700 });
+  const healthDrafts = Object.entries(result.healthProposals).map(([name, text]) =>
+    `## ${name} — предлагаемый полный текст\n\n${text}`).join("\n\n");
   const files = { ...result.updates, [`reflections/${window.date}.md`]:
-    `# Рефлексия ${window.date}\n\nМодель: openai-codex/gpt-6-luna · max.\nПериод UTC: ${new Date(window.start).toISOString()} — ${new Date(window.end).toISOString()}${window.partial ? " (неполный день, тестовый запуск)" : ""}.\n\n${result.report}\n` };
+    `# Рефлексия ${window.date}\n\nМодель: openai-codex/gpt-6-luna · max.\nПериод UTC: ${new Date(window.start).toISOString()} — ${new Date(window.end).toISOString()}${window.partial ? " (неполный день, тестовый запуск)" : ""}.\n\n${result.report}\n`,
+    [`reflections/health/${window.date}.md`]:
+      `# HP: рефлексия ${window.date}\n\nРежим: только предложения для ручного просмотра. Файлы здоровья не изменены.\nМодель: openai-codex/gpt-6-luna · max.\nПериод UTC: ${new Date(window.start).toISOString()} — ${new Date(window.end).toISOString()}${window.partial ? " (неполный день, тестовый запуск)" : ""}.\n\n${result.healthReport}\n\n${healthDrafts}\n` };
   for (const [name, text] of Object.entries(files)) {
     const path = join(directory, name);
     await writeFile(`${path}.tmp`, text, { mode: 0o600 });
@@ -84,8 +96,13 @@ async function main() {
   const transcript = await collectTranscript(join(agentDir, "sessions/pi-telegram"), window);
   const counts = { date: window.date, partial: window.partial, sessions: new Set(transcript.map(item => item.source.split("#")[0])).size, messages: transcript.length };
   if (args.includes("--inspect")) { console.log(JSON.stringify({ ...counts, sources: transcript.map(item => item.source) })); return; }
-  const before = Object.fromEntries(await Promise.all(names.map(async name => [name, await readFile(join(family, name), "utf8")])));
-  if (!transcript.length) { console.log(JSON.stringify({ ...counts, skipped: "no messages" })); return; }
+  const before = Object.fromEntries(await Promise.all([...names, ...healthNames].map(async name => [name, await readFile(join(family, name), "utf8")])));
+  if (!transcript.length) {
+    await saveReflection(family, before, { updates: {}, report: "Новых семейных фактов нет: за день нет сообщений.",
+      healthProposals: {}, healthReport: "Новых подтверждённых фактов HP нет: за день нет сообщений." }, window);
+    console.log(JSON.stringify({ ...counts, skipped: "no messages", reportsSaved: true }));
+    return;
+  }
   const modelRuntime = await ModelRuntime.create({ agentDir });
   const model = modelRuntime.getModel("openai-codex", "gpt-6-luna");
   if (!model || !(await modelRuntime.getAvailable()).some(item => item.provider === model.provider && item.id === model.id)) throw new Error("GPT-6 Luna is unavailable; restore OpenAI Codex authorization");
@@ -99,7 +116,7 @@ async function main() {
   try {
     if (session.model?.id !== "gpt-6-luna" || session.thinkingLevel !== "max" || session.getActiveToolNames().length) throw new Error("Reflection model/thinking/tool configuration mismatch");
     const started = Date.now();
-    const prompt = `Extract ONLY new explicitly confirmed family facts from this day's text conversation in one pass. Assistant replies provide context, never proof. Compare with current memory; do not duplicate facts or analyze technical work. Return ONLY {updates, report} JSON with complete contents for changed files. If nothing is new, updates is {} and report is "Новых семейных фактов нет.". No code fences.\n${JSON.stringify({ window, memory: before, conversation: transcript })}`;
+    const prompt = `Review this day's text conversation in one pass. Compare with current memory. Assistant replies provide context, never proof. General family/cinema memory: return updates and report for automatic application. Health memory: return healthProposals and healthReport for manual review ONLY; proposals never change health files. Return ONLY {updates, report, healthProposals, healthReport} JSON with complete contents for proposed changed files. If nothing is new, the corresponding map is {} and report says "Новых семейных фактов нет." or "Новых подтверждённых фактов HP нет.". No code fences.\n${JSON.stringify({ window, memory: before, conversation: transcript })}`;
     console.log(JSON.stringify({ event: "reflection_started", ...counts, requests: 1, conversationCharacters: JSON.stringify(transcript).length,
       model: session.model.id, thinking: session.thinkingLevel }));
     await session.prompt(prompt);
@@ -108,7 +125,8 @@ async function main() {
     const result = JSON.parse(session.getLastAssistantText() ?? "");
     const updated = await saveReflection(family, before, result, window);
     console.log(JSON.stringify({ event: "reflection_completed", ...counts, elapsedSeconds: Math.round((Date.now() - started) / 1000), updated,
-      report: join(family, "reflections", `${window.date}.md`), sessionId: session.sessionId }));
+      report: join(family, "reflections", `${window.date}.md`),
+      healthReport: join(family, "reflections/health", `${window.date}.md`), healthProposals: Object.keys(result.healthProposals), sessionId: session.sessionId }));
   } finally { session.dispose(); }
 }
 

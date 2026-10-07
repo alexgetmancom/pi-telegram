@@ -23,7 +23,7 @@ const role = process.argv[2] ?? "ai";
 const sessions = {
   ai: { cwd: process.cwd(), topic: 16, port: 8186, instructions: "ai/AGENTS.md", notes: ["watchlist.md"] },
   cinema: { cwd: join(homedir(), "projects/home/cli-botlix"), topic: 3, port: 8187, instructions: "cinema/AGENTS.md", notes: ["watchlist.md"], startAutomation: startMediaAutomation },
-  health: { cwd: join(homedir(), ".local/share/family/health"), topic: 359, port: 8188, instructions: "health/AGENTS.md", notes: ["health/alex.md", "health/maru.md", "health/notes.md"], startAutomation: startHealthAutomation },
+  health: { cwd: join(homedir(), ".local/share/family/health"), topic: 359, port: 8188, instructions: "health/AGENTS.md", notes: ["health/alex.md", "health/alex-training.md", "health/alex-nutrition.md", "health/maru.md", "health/maru-training.md", "health/maru-nutrition.md", "health/notes.md"], startAutomation: startHealthAutomation },
 };
 const sessionConfig = Object.hasOwn(sessions, role) ? sessions[role] : undefined;
 if (!sessionConfig || process.argv[3]) throw new Error("Unknown session role: use ai, cinema or health");

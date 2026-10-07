@@ -106,6 +106,8 @@ test("family SDK host keeps Health isolated with full tools and role-specific au
     assert.deepEqual(Array.from(calls.instructions?.filter(path => path.includes("/agent/")) ?? []), [`/repo/agent/TELEGRAM.md`, `/repo/agent/${target.agent}`]);
     assert.equal(calls.healthFiles?.some(path => path.endsWith("health/alex.md")), target.role === "health");
     assert.equal(calls.healthFiles?.some(path => path.endsWith("watchlist.md")), target.role !== "health");
+    for (const name of ["alex-training.md", "alex-nutrition.md", "maru-training.md", "maru-nutrition.md"]) assert.equal(calls.healthFiles?.some(path => path.endsWith("health/" + name)), target.role === "health");
+    assert.equal(calls.healthFiles?.some(path => path.endsWith("health/training.md")), false);
   }
 });
 
@@ -159,7 +161,7 @@ test("Real SDK new, resume and fork preserve the sole role document for all topi
    mkdirSync(cwd,{recursive:true});
    const agentDir = join(home,"agent"); mkdirSync(agentDir,{recursive:true});
    const family=join(home,".local/share/family");mkdirSync(join(family,"health"),{recursive:true});
-   for(const name of ["alex.md","maru.md","watchlist.md","health/alex.md","health/maru.md","health/notes.md"]) writeFileSync(join(family,name),"fixture family data");
+   for(const name of ["alex.md","maru.md","watchlist.md","health/alex.md","health/alex-training.md","health/alex-nutrition.md","health/maru.md","health/maru-training.md","health/maru-nutrition.md","health/notes.md"]) writeFileSync(join(family,name),"fixture family data");
    const bundles:string[][]=[];
    let runtime:any;
    const context=createContext({URL,Object,JSON,AbortController,process:{argv:["node","serve.mjs",role],cwd:()=>home,env:{},stdout:{write(){}},once(){}},imports:{

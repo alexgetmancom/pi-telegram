@@ -8,6 +8,7 @@ import {
   mkdir,
   mkdtemp,
   readdir,
+  realpath,
   readFile,
   rm,
   stat,
@@ -2491,7 +2492,7 @@ test("Telegram API client resolves bot tokens lazily for wrapped calls", async (
 });
 
 test("local Bot API sends album paths as JSON and copies local getFile without network download", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "local-bot-api-"));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "local-bot-api-")));
   const a = join(dir, "a.jpg"), b = join(dir, "b.jpg");
   await writeFile(a, "first"); await writeFile(b, "second");
   const priorBase = process.env.PI_TELEGRAM_API_BASE, priorRoots = process.env.PI_TELEGRAM_LOCAL_FILE_ROOTS;

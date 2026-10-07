@@ -119,6 +119,7 @@ test("Health report keeps people separate and missing data unknown; weekly caden
   assert.equal(healthWeeklyKey(new Date("2026-10-12T18:00:00Z")), null);
   const view = healthReportView({ alex: { metrics: { steps: { data: [{ average: 1234, observed_days: 2 }] } }, sync: [] }, maru: { metrics: {}, sync: [{ metric: "sleep_details", error: "source failure" }] } });
   assert.match(view.text, /Алекс[\s\S]*1234/); assert.match(view.text, /Маша[\s\S]*нет данных/); assert.match(view.text, /sleep_details/);
+  assert.match(healthReportView({}, {receipts: 2, classified_food_items: 4, classified_food_sum_rub: 300, uncertain_grocery_items: 1}).text, /Покупки не равны съеденному/);
 });
 
 test("Health automation preserves partial CLI results and never repeats uncertain weekly sends", async () => {
@@ -133,8 +134,8 @@ test("Health automation preserves partial CLI results and never repeats uncertai
   const context = createContext({ AbortController, Intl, Date: Sunday, setTimeout: (fn: () => void) => { scheduled.push(fn); return { unref() {} }; }, clearTimeout() {}, imports: {
     "node:child_process": { execFile: async (_binary: string, args: string[]) => {
       commands.push(args[0]);
-      if (args[0] === "tick") throw Object.assign(new Error("partial failure"), { stdout: JSON.stringify({ ok: false, data: {}, error: "source failed" }) });
-      return { stdout: JSON.stringify({ ok: true, data: { alex: { metrics: {}, sync: [] } } }) };
+      if (args[0] === "tick" && !_binary.endsWith("check-radar")) throw Object.assign(new Error("partial failure"), { stdout: JSON.stringify({ ok: false, data: {}, error: "source failed" }) });
+      return { stdout: JSON.stringify({ ok: true, data: args[0] === "shopping" ? { receipts: 3, classified_food_items: 7, classified_food_sum_rub: 500, uncertain_grocery_items: 1 } : { alex: { metrics: {}, sync: [] } } }) };
     } },
     "node:util": { promisify: (fn: unknown) => fn }, "node:path": { join }, "node:os": { homedir: () => "/private" },
     "node:fs": { readFileSync: () => { if (!receipt) throw Object.assign(new Error("missing"), { code: "ENOENT" }); return receipt; }, writeFileSync: (_path: string, body: string) => { receipt = body; }, renameSync() {} },
@@ -145,7 +146,7 @@ test("Health automation preserves partial CLI results and never repeats uncertai
   scheduled.shift()?.(); await new Promise(resolve => setImmediate(resolve));
   assert.equal(JSON.parse(receipt!).state, "uncertain");
   scheduled.shift()?.(); await new Promise(resolve => setImmediate(resolve));
-  await stop(); assert.equal(sends, 1); assert.deepEqual(commands, ["tick", "compare", "tick"]);
+  await stop(); assert.equal(sends, 1); assert.deepEqual(commands, ["tick", "tick", "compare", "shopping", "tick", "tick"]);
 });
 
 

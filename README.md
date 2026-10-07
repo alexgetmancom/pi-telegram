@@ -334,6 +334,8 @@ The docs index lives at [docs/README.md](./docs/README.md).
 
 ## Development
 
+This fork runs on Linux servers and VPS hosts. macOS is used for local development. CI validates Linux only; Windows is unsupported.
+
 Pi loads the compiled `dist/pi-telegram/index.js` entrypoint. The committed distributive also makes Git installs self-contained. After every project change, run `npm run build` before `/reload`, restart, or live verification; `npm run build:check` verifies source/artifact synchronization without rewriting it.
 
 ```bash

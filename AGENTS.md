@@ -139,7 +139,7 @@ The detailed map is canonical in [`docs/architecture.md`](./docs/architecture.md
 - Treat every meaningful `lib/extension.ts` edit as a composition-pressure check, but keep one-off live adapter wiring there when extraction would only hide cross-domain state.
 - Follow [`docs/ui-style.md`](./docs/ui-style.md) for interface copy, emoji, buttons, menus, and dialogs. Update the registry before assigning a new UI emoji meaning. Standalone notices use one fully bold emoji-led sentence with a terminal period; menu or chooser headings use the same hierarchy with a terminal colon. Material names may add nested italic emphasis without breaking the outer bold span. Typed callback toasts preserve equivalent emoji-led plain text without a terminal sentence period; question/exclamation marks and ellipses remain. In-chat notices and explicit raw API payloads keep their punctuation.
 - Markdown lists never contain blank lines between adjacent items; list items are not paragraphs. Use blank lines only between paragraphs or independently separated blocks. Markdown tables use compact source formatting with `---` separator cells and one surrounding space per cell. Preserve vendored references unchanged.
-- Treat Windows filesystem, named-pipe, lock, heartbeat, and atomic-rename reports as high-signal evidence; reduce them to regressions or explicit platform caveats.
+- Support Linux deployment and macOS local development. Validate Linux in CI; Windows is unsupported. Do not add Windows compatibility work.
 - Route significant runtime failures through the redacted recent-event recorder. Keep the compact TUI status at generic `error`; details belong in diagnostics.
 
 ## 8. Work Protocol

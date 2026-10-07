@@ -1,10 +1,9 @@
 /** Media notification rendering regression. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync, writeFileSync, existsSync, mkdtempSync, mkdirSync, rmSync, realpathSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Script, createContext } from "node:vm";
 // @ts-expect-error The deployed SDK host runs native JavaScript.
 import { mediaEventView } from "../scripts/media-automation.mjs";
@@ -165,7 +164,7 @@ test("Real SDK new, resume and fork preserve the sole role document for all topi
  const source = readFileSync(new URL("../scripts/serve.mjs", import.meta.url),"utf8")
   .replace(/^#!.*\n/u, "")
   .replace(/^import ([\s\S]*?) from "([^"]+)";/gm, (_all,names:string,module:string)=>names.trim().startsWith("{") ? `const ${names} = imports[${JSON.stringify(module)}];` : `const ${names} = imports[${JSON.stringify(module)}].default;`);
- const home = realpathSync(mkdtempSync(join(tmpdir(),"family-roles-")));
+ const home = mkdtempSync(join(tmpdir(),"family-roles-"));
  try {
   for(const role of ["ai","cinema","health"]) {
    const cwd = role==="ai" ? home : role==="cinema" ? join(home,"projects/home/cli-botlix") : join(home,".local/share/family/health");
@@ -207,7 +206,7 @@ test("Real SDK new, resume and fork preserve the sole role document for all topi
    await runtime.fork(question,{position:"at"});await runtime.session.prompt("capabilities");
    await runtime.switchSession(initial);await runtime.session.prompt("capabilities");
    assert.equal(bundles.length,4);
-   for(const paths of bundles)assert.deepEqual(paths.filter(path=>path.endsWith("AGENTS.md")),[fileURLToPath(new URL(`../agent/${role}/AGENTS.md`,import.meta.url))]);
+   for(const paths of bundles)assert.deepEqual(paths.filter(path=>path.endsWith("AGENTS.md")),[new URL(`../agent/${role}/AGENTS.md`,import.meta.url).pathname]);
    await runtime.dispose();
   }
  } finally {rmSync(home,{recursive:true,force:true});}

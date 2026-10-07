@@ -13,14 +13,7 @@ permissions:
 
 jobs:
   validate:
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Check out repository
@@ -36,25 +29,9 @@ jobs:
         run: npm run build
       - name: Run typecheck
         run: npm run typecheck
-      - name: Run Windows bus lifecycle probes
-        if: matrix.os == 'windows-latest'
-        timeout-minutes: 2
-        run: >-
-          node --experimental-strip-types --test --test-reporter=spec
-          --test-name-pattern="active profile endpoint|replacement endpoint generation"
-          tests/bus.test.ts
-      - name: Run Windows outbound voice executable probe
-        if: matrix.os == 'windows-latest'
-        timeout-minutes: 2
-        run: >-
-          node --experimental-strip-types --test --test-reporter=spec
-          --test-name-pattern="Windows cmd|multipart voice calls|scoped follower API calls"
-          tests/command-templates.test.ts tests/outbound-voice.test.ts
-          tests/bus-follower.test.ts tests/bus-leader.test.ts
       - name: Run tests
         run: npm test
       - name: Check package contents
         run: npm run pack:check
       - name: Audit dependencies
-        if: matrix.os == 'ubuntu-latest'
         run: npm run audit

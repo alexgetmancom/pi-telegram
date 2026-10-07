@@ -1,7 +1,7 @@
 /** Real Pi SDK session replacement through the native leader/follower bridge; Telegram is local and no model calls occur. */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, realpathSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices, SessionManager } from "@earendil-works/pi-coding-agent";
@@ -9,7 +9,7 @@ import { fork } from "node:child_process";
 import telegram from "../lib/extension.ts";
 
 test("Real SDK replaces AI then Cinema sessions and clears both handoffs", { timeout: 40000 }, async () => {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), "pi-forum-sdk-")));
+  const dir = mkdtempSync(join(tmpdir(), "pi-forum-sdk-"));
   const methods: string[] = [];
   const previousDir = process.env.PI_CODING_AGENT_DIR, previousFetch = globalThis.fetch;
   process.env.PI_CODING_AGENT_DIR = dir;

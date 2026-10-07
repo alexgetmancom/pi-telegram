@@ -10,18 +10,26 @@ export function healthWeeklyKey(now) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Moscow", weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(now).map(p => [p.type, p.value]));
   return parts.weekday === "Sun" && Number(parts.hour) >= 21 ? `${parts.year}-${parts.month}-${parts.day}` : null;
 }
-export function healthReportView(people, shopping) {
+export function healthReportView(people, shopping, journals = {}) {
   const lines = ["Здоровье — последние 7 дней"];
-  for (const name of Object.keys(people).sort()) {
+  for (const name of [...new Set([...Object.keys(people), ...Object.keys(journals)])].sort()) {
     const summary = people[name];
     lines.push(`\n${name === "alex" ? "Алекс" : name === "maru" ? "Маша" : name}`);
-    if (!summary?.metrics) { lines.push("Данные недоступны"); continue; }
-    for (const [key, label, unit] of [["steps", "Шаги", "в день"], ["sleep", "Сон", "мин"], ["heart_rate_daily", "Пульс", "уд/мин"]]) {
+    if (!summary?.metrics) lines.push("Данные браслета недоступны");
+    else for (const [key, label, unit] of [["steps", "Шаги", "в день"], ["sleep", "Сон", "мин"], ["heart_rate_daily", "Пульс", "уд/мин"]]) {
       const row = summary.metrics[key]?.data?.[0];
       lines.push(`${label}: ${row?.average == null ? "нет данных" : `${Math.round(row.average)} ${unit}, дней: ${row.observed_days}`}`);
     }
-    const failures = summary.sync?.filter(metric => metric.error).map(metric => metric.metric) ?? [];
+    const failures = summary?.sync?.filter(metric => metric.error).map(metric => metric.metric) ?? [];
     if (failures.length) lines.push(`Не обновились: ${failures.join(", ")}`);
+    const journal = journals[name];
+    if (journal?.training) lines.push(`Записано тренировок: ${journal.training.sessions.length}`);
+    if (journal?.nutrition) {
+      const food = journal.nutrition;
+      lines.push(`Дневник питания: ${food.recorded_days} дней, полностью: ${food.complete_days}`);
+      if (food.average_kcal_complete_days != null) lines.push(`Средние калории: ${Math.round(food.average_kcal_complete_days)} ккал за ${food.days_with_complete_kcal} полностью заполненных дней`);
+      else lines.push("Средние калории: нет полных данных");
+    }
   }
   if (shopping) {
     lines.push(`\nПокупки продуктов за 7 дней: ${shopping.receipts} чеков`);
@@ -58,9 +66,17 @@ export function startHealthAutomation(log) {
           let shopping;
           try { shopping = (await cli("check-radar", ["shopping", "--period", "7d"])).data; }
           catch (error) { log("shopping_report_error", { error: error.message }); }
+          const journals = {};
+          await Promise.all(["alex", "maru"].map(async person => {
+            const entry = journals[person] = {};
+            await Promise.all([
+              cli("health", ["training", "list", "--person", person, "--period", "7d"]).then(value => { entry.training = value.data; }).catch(error => log("training_report_error", { person, error: error.message })),
+              cli("health", ["nutrition", "summary", "--person", person, "--period", "7d"]).then(value => { entry.nutrition = value.data; }).catch(error => log("nutrition_report_error", { person, error: error.message })),
+            ]);
+          }));
           if (!result.data || controller.signal.aborted) return;
           save({ week, state: "claimed" });
-          const delivered = await sendTelegramView(healthReportView(result.data, shopping), { scope: { kind: "target", target: { chatId: -1003985826484, threadId: 359 } } });
+          const delivered = await sendTelegramView(healthReportView(result.data, shopping, journals), { scope: { kind: "target", target: { chatId: -1003985826484, threadId: 359 } } });
           save({ week, state: delivered.ok ? "delivered" : delivered.reason === "commit-unknown" || delivered.partial ? "uncertain" : "retry" });
           log("health_weekly_delivery", { week, ok: delivered.ok, reason: delivered.reason });
         }

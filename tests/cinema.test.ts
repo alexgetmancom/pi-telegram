@@ -120,6 +120,9 @@ test("Health report keeps people separate and missing data unknown; weekly caden
   const view = healthReportView({ alex: { metrics: { steps: { data: [{ average: 1234, observed_days: 2 }] } }, sync: [] }, maru: { metrics: {}, sync: [{ metric: "sleep_details", error: "source failure" }] } });
   assert.match(view.text, /Алекс[\s\S]*1234/); assert.match(view.text, /Маша[\s\S]*нет данных/); assert.match(view.text, /sleep_details/);
   assert.match(healthReportView({}, {receipts: 2, classified_food_items: 4, classified_food_sum_rub: 300, uncertain_grocery_items: 1}).text, /Покупки не равны съеденному/);
+  const diaries = healthReportView({}, undefined, { alex: { training: { sessions: [{ id: "a" }] }, nutrition: { recorded_days: 2, complete_days: 0, average_kcal_complete_days: null } }, maru: { nutrition: { recorded_days: 3, complete_days: 2, average_kcal_complete_days: 1600, days_with_complete_kcal: 2 } } });
+  assert.match(diaries.text, /Алекс[\s\S]*Записано тренировок: 1[\s\S]*нет полных данных/);
+  assert.match(diaries.text, /Маша[\s\S]*1600 ккал за 2/);
 });
 
 test("Health automation preserves partial CLI results and never repeats uncertain weekly sends", async () => {
@@ -127,6 +130,7 @@ test("Health automation preserves partial CLI results and never repeats uncertai
   let receipt: string | undefined;
   let sends = 0;
   const commands: string[] = [];
+  const journalSubjects: string[] = [];
   const source = readFileSync(new URL("../scripts/health-automation.mjs", import.meta.url), "utf8")
     .replace(/^import \{([^}]+)\} from "([^"]+)";/gm, (_all, names: string, module: string) => `const {${names}} = imports[${JSON.stringify(module)}];`)
     .replace(/^export function /gm, "function ");
@@ -134,6 +138,10 @@ test("Health automation preserves partial CLI results and never repeats uncertai
   const context = createContext({ AbortController, Intl, Date: Sunday, setTimeout: (fn: () => void) => { scheduled.push(fn); return { unref() {} }; }, clearTimeout() {}, imports: {
     "node:child_process": { execFile: async (_binary: string, args: string[]) => {
       commands.push(args[0]);
+      if (args[0] === "training" || args[0] === "nutrition") {
+        journalSubjects.push(`${args[0]}:${args[3]}`);
+        return { stdout: JSON.stringify({ ok: true, data: args[0] === "training" ? { sessions: [] } : { recorded_days: 0, complete_days: 0, average_kcal_complete_days: null } }) };
+      }
       if (args[0] === "tick" && !_binary.endsWith("check-radar")) throw Object.assign(new Error("partial failure"), { stdout: JSON.stringify({ ok: false, data: {}, error: "source failed" }) });
       return { stdout: JSON.stringify({ ok: true, data: args[0] === "shopping" ? { receipts: 3, classified_food_items: 7, classified_food_sum_rub: 500, uncertain_grocery_items: 1 } : { alex: { metrics: {}, sync: [] } } }) };
     } },
@@ -146,7 +154,8 @@ test("Health automation preserves partial CLI results and never repeats uncertai
   scheduled.shift()?.(); await new Promise(resolve => setImmediate(resolve));
   assert.equal(JSON.parse(receipt!).state, "uncertain");
   scheduled.shift()?.(); await new Promise(resolve => setImmediate(resolve));
-  await stop(); assert.equal(sends, 1); assert.deepEqual(commands, ["tick", "tick", "compare", "shopping", "tick", "tick"]);
+  await stop(); assert.equal(sends, 1); assert.deepEqual(commands, ["tick", "tick", "compare", "shopping", "training", "nutrition", "training", "nutrition", "tick", "tick"]);
+  assert.deepEqual(journalSubjects.sort(), ["nutrition:alex", "nutrition:maru", "training:alex", "training:maru"]);
 });
 
 

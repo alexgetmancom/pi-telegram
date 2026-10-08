@@ -26,10 +26,26 @@ const sessions = {
   cinema: { cwd: join(homedir(), "projects/home/cli-botlix"), topic: 3, port: 8187, instructions: "cinema/AGENTS.md", notes: ["watchlist.md"], startAutomation: startMediaAutomation },
   health: { cwd: join(homedir(), ".local/share/family/health"), topic: 359, port: 8188, instructions: "health/AGENTS.md", notes: ["health/alex.md", "health/alex-training.md", "health/alex-nutrition.md", "health/maru.md", "health/maru-training.md", "health/maru-nutrition.md", "health/notes.md"], startAutomation: startHealthAutomation },
 };
+// Operator-only comparison deployment. A private manifest changes routing and
+// CWD without a second adapter implementation or any production job ownership.
+const comparisonPath = process.env.FAMILY_PI_COMPARISON_CONFIG;
+const comparison = comparisonPath ? JSON.parse(readFileSync(comparisonPath, "utf8")) : undefined;
+if (comparison) {
+  if (comparison.chatId !== -1003902934362 || comparison.automation !== false) {
+    throw new Error("Comparison requires the separate test forum and automation=false");
+  }
+  for (const name of Object.keys(sessions)) {
+    const item = comparison.roles?.[name];
+    if (!item || typeof item.cwd !== "string" || !item.cwd.startsWith("/") || !Number.isSafeInteger(item.topic) || item.topic < 1) {
+      throw new Error("Invalid comparison role");
+    }
+    sessions[name] = { ...sessions[name], cwd: item.cwd, topic: item.topic, startAutomation: undefined };
+  }
+}
 const sessionConfig = Object.hasOwn(sessions, role) ? sessions[role] : undefined;
 if (!sessionConfig || process.argv[3]) throw new Error("Unknown session role: use ai, cinema or health");
 const cwd = sessionConfig.cwd;
-const forumTarget = { chatId: -1003985826484, threadId: sessionConfig.topic };
+const forumTarget = { chatId: comparison?.chatId ?? -1003985826484, threadId: sessionConfig.topic };
 const sessionDir = join(agentDir, "sessions", "pi-telegram");
 function log(event, detail = {}) {
   let line = JSON.stringify({ at: new Date().toISOString(), event, ...detail });

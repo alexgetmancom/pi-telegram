@@ -1,6 +1,10 @@
 # Family forum deployment
 
-The forum uses three native Pi instances with the same pi-telegram bridge. AI owns topic 16; Cinema owns topic 3; Health owns topic 359. The native leader/follower bus keeps one Telegram poller and routes each topic's messages, callbacks, edits, reactions and media to its own session. Both participants share each topic; the three histories remain separate. General stays silent.
+On 2026-10-08 Alex authorized Go Telegram as the production adapter in the Family
+monorepo. This checkout remains the comparison adapter. Historical production
+setup and rollback references follow below.
+
+The original forum uses three native Pi instances with the same pi-telegram bridge. AI owns topic 16; Cinema owns topic 3; Health owns topic 359. The native leader/follower bus keeps one Telegram poller and routes each topic's messages, callbacks, edits, reactions and media to its own session. Both participants share each topic; the three histories remain separate. General stays silent.
 
 All topics use the normal buttons, settings/model menus, draft streaming, reply context, inbound voice/files and outbound voice/media. Voice transcription uses the existing local ASR. Optional voice replies use `scripts/speak.mjs` and local Piper; manual/text replies remain the default. Image understanding depends on the selected model's vision support.
 
@@ -118,3 +122,19 @@ Health now uses the Go CLI `/home/alex/.local/bin/health`. The old Mi Band conta
 Each topic loads exactly its own standalone AGENTS.md; AI instructions are never loaded into Cinema or HP. The native runtime factory applies this same selection on startup, new, resume and fork, and reload refreshes the selected resource. Only Telegram transport rules and private family data are shared. Health diagnostics expose the configured role and instruction path.
 
 HP loads separate profile, training and nutrition memory for Alex and Maru: `health/alex.md`, `health/alex-training.md`, `health/alex-nutrition.md`, `health/maru.md`, `health/maru-training.md`, `health/maru-nutrition.md`. Shared research stays in `health/notes.md`. The former shared `health/training.md` was removed after its personal records were transferred; originals remain in a private backup. Store each personal fact once, with dates and attribution.
+
+## Comparison after Family cutover
+
+`FAMILY_PI_COMPARISON_CONFIG` points to a private JSON manifest with test forum
+`chatId: -1003902934362`, `automation: false` and `roles.{ai,health,cinema}` entries
+containing an absolute `cwd` and topics 25, 26 and 27. Production job ownership
+is never started in this mode. A separate `PI_CODING_AGENT_DIR` holds test auth,
+configuration, journals and copied native test histories. Keep both adapters on
+the existing Local Bot API. Seed `profiles.default.lastUpdateId` from the stopped
+Go test offset minus one; Pi transfers it into its journal instead of discarding
+pending inputs through a missing-cursor bootstrap. Configured topic CWDs retain
+the native histories from the Go trial.
+
+The three comparison units are `pi-telegram-test`, `pi-telegram-test-cinema` and
+`pi-telegram-test-health`; ports 8186–8188 diagnose comparison only. Production
+Family CLI checks use the Go adapter's private Unix socket.

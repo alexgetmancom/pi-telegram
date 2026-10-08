@@ -49,6 +49,7 @@ export type TelegramDeliveryScope =
   | { kind: "active-turn" }
   | { kind: "instance" }
   | { kind: "aggregate" }
+  | { kind: "owner" }
   | { kind: "target"; target: TelegramDeliveryTarget };
 
 export interface TelegramDeliveryHandle {
@@ -98,6 +99,7 @@ export interface TelegramDeliveryRuntime {
     options: SendTelegramViewOptions,
   ) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
   sendPhoto?: (filePath: string, view: TelegramDeliveryView, options: SendTelegramViewOptions) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
+  sendDocument?: (filePath: string, view: TelegramDeliveryView, options: SendTelegramViewOptions) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
   editView: (
     handle: TelegramDeliveryHandle,
     view: TelegramDeliveryView,
@@ -116,6 +118,7 @@ export interface TelegramDeliveryTargetResolverDeps {
   getActiveTurnTarget: () => TelegramDeliveryTarget | undefined;
   getInstanceTarget: () => TelegramDeliveryTarget | undefined;
   getAggregateTarget: () => TelegramDeliveryTarget | undefined;
+  getOwnerTarget?: () => TelegramDeliveryTarget | undefined;
   isExplicitTargetAuthorized: (target: TelegramDeliveryTarget) => boolean;
 }
 
@@ -143,6 +146,7 @@ export interface TelegramDeliveryRuntimeDeps extends TelegramDeliveryTargetResol
     options: TelegramDeliveryTransportOptions,
   ) => Promise<number>;
   sendPhoto?: (target: TelegramDeliveryTarget, filePath: string, chunk: TelegramDeliveryRenderedChunk, options: TelegramDeliveryTransportOptions) => Promise<number>;
+  sendDocument?: (target: TelegramDeliveryTarget, filePath: string, chunk: TelegramDeliveryRenderedChunk, options: TelegramDeliveryTransportOptions) => Promise<number>;
   editChunk: (
     target: TelegramDeliveryTarget,
     messageId: number,
@@ -285,6 +289,7 @@ export interface TelegramDeliveryTargetPolicyView {
   canDeliver: boolean;
   ownsDirect: boolean;
   allowedChatId?: number;
+  ownerUserId?: number;
   followerTarget?: TelegramDeliveryTarget;
   leaderTarget?: TelegramDeliveryTarget;
   liveTargets?: readonly TelegramDeliveryTarget[];
@@ -301,6 +306,7 @@ export function createTelegramDeliveryTargetPolicyRuntime(deps: {
   ownsDirect(): boolean;
   isFollowerRegistered(): boolean;
   getAllowedChatId(): number | undefined;
+  getOwnerUserId?: () => number | undefined;
   getFollowerTarget(): TelegramDeliveryTarget | undefined;
   getLeaderTarget(): TelegramDeliveryTarget | undefined;
   listThreadRecords(): readonly { target: TelegramDeliveryTarget }[];
@@ -314,6 +320,7 @@ export function createTelegramDeliveryTargetPolicyRuntime(deps: {
         canDeliver: ownsDirect || deps.isFollowerRegistered(),
         ownsDirect,
         allowedChatId: deps.getAllowedChatId(),
+        ...(deps.getOwnerUserId ? { ownerUserId: deps.getOwnerUserId() } : {}),
         followerTarget: deps.getFollowerTarget(),
         leaderTarget: deps.getLeaderTarget(),
         liveTargets: deps.listThreadRecords().map((record) => record.target),
@@ -348,6 +355,11 @@ export function resolveTelegramDeliveryAggregateTarget(
   return !view.canDeliver || view.allowedChatId === undefined
     ? undefined
     : { chatId: view.allowedChatId };
+}
+
+export function resolveTelegramDeliveryOwnerTarget(view: TelegramDeliveryTargetPolicyView): TelegramDeliveryTarget | undefined {
+  return view.canDeliver && view.ownsDirect && view.ownerUserId !== undefined
+    ? { chatId: view.ownerUserId } : undefined;
 }
 
 /** @internal */
@@ -406,7 +418,9 @@ function resolveTelegramDeliveryTarget(
       ? deps.getActiveTurnTarget()
       : scope.kind === "instance"
         ? deps.getInstanceTarget()
-        : deps.getAggregateTarget();
+        : scope.kind === "owner"
+          ? deps.getOwnerTarget?.()
+          : deps.getAggregateTarget();
   if (!target) {
     return failure(
       "target-unavailable",
@@ -614,6 +628,24 @@ export function createTelegramDeliveryRuntime(
         } catch (error) { return active ? transportFailure("send", error, target) : inactive(); }
       });
     },
+    async sendDocument(filePath, view, options) {
+      if (!active) return inactive();
+      const resolved = resolveTelegramDeliveryTarget(options.scope, deps);
+      if (!resolved.ok) return failure(resolved.reason, resolved.message);
+      if (!deps.sendDocument) return failure("runtime-unavailable", "Document delivery is unavailable.");
+      const rendered = render(view);
+      if (!rendered.ok) return failure(rendered.reason, rendered.message);
+      if (rendered.value.length !== 1 || view.text.length > 900) return failure("invalid-view", "Document caption is too long.");
+      const target = resolved.value;
+      return runForTarget(target, async () => {
+        if (!active) return inactive();
+        try {
+          const id = await deps.sendDocument!(target, filePath, rendered.value[0]!, getChunkTransportOptions(view, 0, 1, options.replyToMessageId));
+          if (!active) return inactive();
+          return { ok: true, value: createHandle(target, [id]) };
+        } catch (error) { return active ? transportFailure("send", error, target) : inactive(); }
+      });
+    },
     async editView(handle, view) {
       const resolved = resolveHandle(handle);
       if (!resolved.ok) return failure(resolved.reason, resolved.message);
@@ -744,6 +776,9 @@ export function createTelegramBridgeDeliveryRuntime(
     getAggregateTarget() {
       return resolveTelegramDeliveryAggregateTarget(getPolicyView());
     },
+    getOwnerTarget() {
+      return resolveTelegramDeliveryOwnerTarget(getPolicyView());
+    },
     isExplicitTargetAuthorized(target) {
       return isTelegramDeliveryExplicitTargetAuthorized(
         target,
@@ -798,6 +833,18 @@ export function createTelegramBridgeDeliveryRuntime(
         ...(target.threadId === undefined ? {} : { message_thread_id: String(target.threadId) }),
         ...(options.replyMarkup ? { reply_markup: JSON.stringify(options.replyMarkup) } : {}),
       }, "photo", filePath, "poster.jpg");
+      assertTransportActive();
+      deps.recordOwnership({ chatId: target.chatId, messageId: sent.message_id, target });
+      return sent.message_id;
+    },
+    async sendDocument(target, filePath, chunk) {
+      assertTransportActive();
+      if (!deps.photoApi) throw new Error("Document transport is unavailable.");
+      const sent = await deps.photoApi.callMultipart<{ message_id: number }>("sendDocument", {
+        chat_id: String(target.chatId), caption: chunk.text,
+        ...(chunk.parseMode === "html" ? { parse_mode: "HTML" } : {}),
+        ...(target.threadId === undefined ? {} : { message_thread_id: String(target.threadId) }),
+      }, "document", filePath, filePath.split("/").at(-1) || "backup.tar.gz");
       assertTransportActive();
       deps.recordOwnership({ chatId: target.chatId, messageId: sent.message_id, target });
       return sent.message_id;
@@ -912,6 +959,14 @@ export async function sendTelegramPhoto(filePath: string, view: TelegramDelivery
   if (invalid) return invalid;
   if (typeof filePath !== "string" || !filePath.startsWith("/") || filePath.includes("\0")) return failure("invalid-view", "An absolute photo file is required.");
   return runDeliveryOperation(runtime => runtime.sendPhoto ? runtime.sendPhoto(filePath, view, options) : Promise.resolve(failure("runtime-unavailable", "Photo delivery is unavailable.")));
+}
+
+/** Deliver a local document through the authorized Telegram transport. */
+export async function sendTelegramDocument(filePath: string, view: TelegramDeliveryView, options: SendTelegramViewOptions): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>> {
+  const invalid = validateView<TelegramDeliveryHandle>(view);
+  if (invalid) return invalid;
+  if (typeof filePath !== "string" || !filePath.startsWith("/") || filePath.includes("\0")) return failure("invalid-view", "An absolute document file is required.");
+  return runDeliveryOperation(runtime => runtime.sendDocument ? runtime.sendDocument(filePath, view, options) : Promise.resolve(failure("runtime-unavailable", "Document delivery is unavailable.")));
 }
 
 /** @internal Edit an exact Telegram message through the currently bound runtime generation. */

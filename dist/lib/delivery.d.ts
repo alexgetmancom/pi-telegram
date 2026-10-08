@@ -20,6 +20,8 @@ export type TelegramDeliveryScope = {
 } | {
     kind: "aggregate";
 } | {
+    kind: "owner";
+} | {
     kind: "target";
     target: TelegramDeliveryTarget;
 };
@@ -52,6 +54,7 @@ export interface TelegramDeliveryRuntime {
     shutdown: () => void;
     sendView: (view: TelegramDeliveryView, options: SendTelegramViewOptions) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
     sendPhoto?: (filePath: string, view: TelegramDeliveryView, options: SendTelegramViewOptions) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
+    sendDocument?: (filePath: string, view: TelegramDeliveryView, options: SendTelegramViewOptions) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
     editView: (handle: TelegramDeliveryHandle, view: TelegramDeliveryView) => Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
     deleteView: (handle: TelegramDeliveryHandle) => Promise<TelegramDeliveryResult<void>>;
     sendChatAction: (action: TelegramDeliveryChatAction, scope: TelegramDeliveryScope) => Promise<TelegramDeliveryResult<void>>;
@@ -61,6 +64,7 @@ export interface TelegramDeliveryTargetResolverDeps {
     getActiveTurnTarget: () => TelegramDeliveryTarget | undefined;
     getInstanceTarget: () => TelegramDeliveryTarget | undefined;
     getAggregateTarget: () => TelegramDeliveryTarget | undefined;
+    getOwnerTarget?: () => TelegramDeliveryTarget | undefined;
     isExplicitTargetAuthorized: (target: TelegramDeliveryTarget) => boolean;
 }
 /** @internal */
@@ -79,6 +83,7 @@ export interface TelegramDeliveryRuntimeDeps extends TelegramDeliveryTargetResol
     renderView: (view: TelegramDeliveryView) => readonly TelegramDeliveryRenderedChunk[];
     sendChunk: (target: TelegramDeliveryTarget, chunk: TelegramDeliveryRenderedChunk, options: TelegramDeliveryTransportOptions) => Promise<number>;
     sendPhoto?: (target: TelegramDeliveryTarget, filePath: string, chunk: TelegramDeliveryRenderedChunk, options: TelegramDeliveryTransportOptions) => Promise<number>;
+    sendDocument?: (target: TelegramDeliveryTarget, filePath: string, chunk: TelegramDeliveryRenderedChunk, options: TelegramDeliveryTransportOptions) => Promise<number>;
     editChunk: (target: TelegramDeliveryTarget, messageId: number, chunk: TelegramDeliveryRenderedChunk, options: TelegramDeliveryTransportOptions) => Promise<void>;
     deleteMessage: (target: TelegramDeliveryTarget, messageId: number) => Promise<void>;
     sendChatAction: (target: TelegramDeliveryTarget, action: TelegramDeliveryChatAction) => Promise<void>;
@@ -116,6 +121,7 @@ export interface TelegramDeliveryTargetPolicyView {
     canDeliver: boolean;
     ownsDirect: boolean;
     allowedChatId?: number;
+    ownerUserId?: number;
     followerTarget?: TelegramDeliveryTarget;
     leaderTarget?: TelegramDeliveryTarget;
     liveTargets?: readonly TelegramDeliveryTarget[];
@@ -130,6 +136,7 @@ export declare function createTelegramDeliveryTargetPolicyRuntime(deps: {
     ownsDirect(): boolean;
     isFollowerRegistered(): boolean;
     getAllowedChatId(): number | undefined;
+    getOwnerUserId?: () => number | undefined;
     getFollowerTarget(): TelegramDeliveryTarget | undefined;
     getLeaderTarget(): TelegramDeliveryTarget | undefined;
     listThreadRecords(): readonly {
@@ -142,6 +149,7 @@ export declare function createTelegramDeliveryTargetPolicyRuntime(deps: {
 export declare function resolveTelegramDeliveryInstanceTarget(view: TelegramDeliveryTargetPolicyView): TelegramDeliveryTarget | undefined;
 /** @internal */
 export declare function resolveTelegramDeliveryAggregateTarget(view: TelegramDeliveryTargetPolicyView): TelegramDeliveryTarget | undefined;
+export declare function resolveTelegramDeliveryOwnerTarget(view: TelegramDeliveryTargetPolicyView): TelegramDeliveryTarget | undefined;
 /** @internal */
 export declare function isTelegramDeliveryExplicitTargetAuthorized(candidate: TelegramDeliveryTarget, view: TelegramDeliveryTargetPolicyView): boolean;
 /** @internal */
@@ -157,6 +165,8 @@ export declare function isTelegramDeliveryHandleCurrent(handle: TelegramDelivery
 export declare function sendTelegramView(view: TelegramDeliveryView, options: SendTelegramViewOptions): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
 /** Deliver a local photo through the same authorized, generation-fenced transport. */
 export declare function sendTelegramPhoto(filePath: string, view: TelegramDeliveryView, options: SendTelegramViewOptions): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
+/** Deliver a local document through the authorized Telegram transport. */
+export declare function sendTelegramDocument(filePath: string, view: TelegramDeliveryView, options: SendTelegramViewOptions): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
 /** @internal Edit an exact Telegram message through the currently bound runtime generation. */
 export declare function editTelegramTargetView(target: TelegramDeliveryTarget, messageId: number, view: TelegramDeliveryView): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;
 export declare function editTelegramView(handle: TelegramDeliveryHandle, view: TelegramDeliveryView): Promise<TelegramDeliveryResult<TelegramDeliveryHandle>>;

@@ -8,6 +8,7 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { startHealthAutomation } from "./health-automation.mjs";
 import { startMediaAutomation } from "./media-automation.mjs";
+import { startFamilyOps } from "./family-ops.mjs";
 import telegram from "../dist/index.js";
 import {
   createAgentSessionFromServices,
@@ -21,7 +22,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const agentDir = getAgentDir();
 const role = process.argv[2] ?? "ai";
 const sessions = {
-  ai: { cwd: process.cwd(), topic: 16, port: 8186, instructions: "ai/AGENTS.md", notes: ["watchlist.md"] },
+  ai: { cwd: process.cwd(), topic: 16, port: 8186, instructions: "ai/AGENTS.md", notes: ["watchlist.md"], startAutomation: startFamilyOps },
   cinema: { cwd: join(homedir(), "projects/home/cli-botlix"), topic: 3, port: 8187, instructions: "cinema/AGENTS.md", notes: ["watchlist.md"], startAutomation: startMediaAutomation },
   health: { cwd: join(homedir(), ".local/share/family/health"), topic: 359, port: 8188, instructions: "health/AGENTS.md", notes: ["health/alex.md", "health/alex-training.md", "health/alex-nutrition.md", "health/maru.md", "health/maru-training.md", "health/maru-nutrition.md", "health/notes.md"], startAutomation: startHealthAutomation },
 };

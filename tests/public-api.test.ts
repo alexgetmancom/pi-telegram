@@ -57,6 +57,7 @@ test("Public package subpaths expose the stable extension API", async () => {
     "deleteTelegramView",
     "editTelegramView",
     "sendTelegramChatAction",
+    "sendTelegramDocument",
     "sendTelegramPhoto",
     "sendTelegramView",
   ]);

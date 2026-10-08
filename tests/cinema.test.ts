@@ -62,7 +62,7 @@ test("family SDK host keeps Health isolated with full tools and role-specific au
       ? `const ${names} = imports[${JSON.stringify(module)}];`
       : `const ${names} = imports[${JSON.stringify(module)}].default;`);
   const expected = [
-    { role: undefined, topic: 16, port: 8186, cwd: "/home/alex", agent: "ai/AGENTS.md", automation: false },
+    { role: undefined, topic: 16, port: 8186, cwd: "/home/alex", agent: "ai/AGENTS.md", automation: true },
     { role: "cinema", topic: 3, port: 8187, cwd: "/home/alex/projects/home/cli-botlix", agent: "cinema/AGENTS.md", automation: true },
     { role: "health", topic: 359, port: 8188, cwd: "/home/alex/.local/share/family/health", agent: "health/AGENTS.md", automation: true },
   ];
@@ -82,6 +82,7 @@ test("family SDK host keeps Health isolated with full tools and role-specific au
         "node:os": { homedir: () => "/home/alex" }, "node:url": { fileURLToPath: () => "/repo/scripts/serve.mjs" },
         "./health-automation.mjs": { startHealthAutomation: () => { calls.automation = true; return () => {}; } },
         "./media-automation.mjs": { startMediaAutomation: () => { calls.automation = true; return () => {}; } },
+        "./family-ops.mjs": { startFamilyOps: () => { calls.automation = true; return () => {}; } },
         "../dist/index.js": { default: (_pi: unknown, config: { forumTarget: { threadId: number } }) => { calls.topic = config.forumTarget.threadId; } },
         "@earendil-works/pi-coding-agent": {
           getAgentDir: () => "/agent", SessionManager: { continueRecent: (cwd: string) => { calls.cwd = cwd; return sessionManager; } },
@@ -178,7 +179,7 @@ test("Real SDK new, resume and fork preserve the sole role document for all topi
     "node:http":{createServer:()=>({listen(){},close(){}})},
     "node:fs":{existsSync,readFileSync,writeFileSync},
     "node:path":await import("node:path"),"node:os":{homedir:()=>home},"node:url":await import("node:url"),
-    "./health-automation.mjs":{startHealthAutomation:()=>async()=>{}},"./media-automation.mjs":{startMediaAutomation:()=>async()=>{}},
+    "./health-automation.mjs":{startHealthAutomation:()=>async()=>{}},"./media-automation.mjs":{startMediaAutomation:()=>async()=>{}},"./family-ops.mjs":{startFamilyOps:()=>async()=>{}},
     "../dist/index.js":{default:()=>{}},
     "@earendil-works/pi-coding-agent":{
      getAgentDir:()=>agentDir,SessionManager:sdk.SessionManager,

@@ -18,6 +18,7 @@ import {
   editTelegramView,
   isTelegramDeliveryExplicitTargetAuthorized,
   resolveTelegramDeliveryAggregateTarget,
+  resolveTelegramDeliveryOwnerTarget,
   resolveTelegramDeliveryInstanceTarget,
   sendTelegramChatAction,
   sendTelegramView,
@@ -787,4 +788,21 @@ test("Bridge photo uses existing multipart transport with exact topic and owners
   active = false;
   assert.equal((await runtime.sendPhoto!("/tmp/poster.jpg", { text: "Ready" }, { scope: { kind: "target", target } })).ok, false);
   assert.equal(calls.length, 1);
+});
+
+test("Owner document delivery uses the paired private chat and existing transport", async () => {
+  const calls: unknown[] = [];
+  const policy = { canDeliver: true, ownsDirect: true, allowedChatId: -100, ownerUserId: 42, leaderTarget: { chatId: -100, threadId: 7 } };
+  assert.deepEqual(resolveTelegramDeliveryOwnerTarget(policy), { chatId: 42 });
+  assert.equal(resolveTelegramDeliveryOwnerTarget({ ...policy, ownsDirect: false }), undefined);
+  const runtime = createTelegramBridgeDeliveryRuntime({
+    generation: "document", getTargetPolicyView: () => policy, getActiveTurnTarget: () => undefined,
+    api: { async sendMessage() { throw new Error("unexpected text"); }, async editMessageText() { throw new Error("unexpected edit"); }, async deleteMessage() {}, async sendChatAction() { return true; } },
+    photoApi: { async callMultipart<T>(method: string, fields: Record<string, string>, fileField: string, path: string | string[], filename?: string) {
+      calls.push({ method, fields, fileField, path, filename }); return { message_id: 902 } as T;
+    } }, recordOwnership: () => {},
+  });
+  const result = await runtime.sendDocument!("/tmp/backup.tar.gz", { text: "health · 2026-10-08" }, { scope: { kind: "owner" } });
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls, [{ method: "sendDocument", fields: { chat_id: "42", caption: "health · 2026-10-08" }, fileField: "document", path: "/tmp/backup.tar.gz", filename: "backup.tar.gz" }]);
 });

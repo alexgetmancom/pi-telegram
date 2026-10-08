@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- `Family operations`: The existing Pi leader sends daily Family CLI backup files to the paired owner's private chat and reports hourly freshness changes. A typed document delivery method uses the established Telegram transport; ambiguous uploads are held for manual review.
+
 ## 0.52.2: Polling recovery, safe disconnect and Windows downloads
 
 - `Polling recovery`: Non-conflict poll/admission failures back off from 1 to 30 seconds and keep retrying, allowing recovery after prolonged outages without manual reconnect. Backoff resets only after durable admission succeeds; persistent competing-client conflicts retain their existing terminal stand-down.

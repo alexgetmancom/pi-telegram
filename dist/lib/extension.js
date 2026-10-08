@@ -623,6 +623,7 @@ export default function (pi, options = {}) {
         ownsDirect: lockRuntime.owns,
         isFollowerRegistered: telegramBusFollowerRegistrationState.isRegistered,
         getAllowedChatId() { return configStore.get().forumTarget?.chatId ?? configStore.getAllowedUserId(); },
+        getOwnerUserId: configStore.getAllowedUserId,
         getFollowerTarget: telegramBusFollowerRegistrationState.getTarget,
         getLeaderTarget() { return configStore.get().forumTarget ?? telegramBusLeaderState.getTarget(); },
         listThreadRecords: threadStore.list,

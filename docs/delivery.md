@@ -13,6 +13,7 @@ import {
   deleteTelegramView,
   editTelegramView,
   sendTelegramChatAction,
+  sendTelegramDocument,
   sendTelegramView,
 } from "@llblab/pi-telegram/delivery";
 ```
@@ -59,6 +60,10 @@ export interface TelegramDeliveryView {
 
 `sendTelegramPhoto(absoluteFilePath, view, options)` sends a local poster through the same authorized target, transport generation and per-target serialization. Caption text is limited to 900 characters; the inline keyboard is retained. The trusted host owns and removes its temporary file after delivery. This capability does not expose bot credentials or start another Telegram transport.
 
+### Documents
+
+`sendTelegramDocument(absoluteFilePath, view, options)` sends a local file with a caption through the same transport and ownership checks. The Family Pi leader uses it for private backup delivery. The `owner` scope resolves the paired owner's private chat only while this process owns direct transport; followers cannot use it. A lost response may mean the upload committed, so callers must not repeat a `commit-unknown` send.
+
 ### Target scopes
 
 ```ts
@@ -66,6 +71,7 @@ export type TelegramDeliveryScope =
   | { kind: "active-turn" }
   | { kind: "instance" }
   | { kind: "aggregate" }
+  | { kind: "owner" }
   | { kind: "target"; target: TelegramDeliveryTarget };
 
 export interface TelegramDeliveryTarget {
@@ -78,7 +84,8 @@ Resolution rules:
 
 - `active-turn` requires a current Telegram-owned turn and resolves its exact `{ chatId, threadId? }`.
 - `instance` resolves the current process's assigned follower/leader thread, or the paired private chat in classic mode. It does not silently fall back to an unrelated active thread.
-- `aggregate` resolves the paired private chat without `threadId`; it is the Threaded Mode `All` surface and the ordinary classic chat. Follower aggregate messages carry an internal authenticated-bus marker that the leader validates for the assigned chat and strips before Bot API transport; unmarked or cross-chat threadless follower writes remain denied.
+- `aggregate` resolves the configured chat without `threadId`; it is the Threaded Mode `All` surface or the ordinary classic chat. Follower aggregate messages carry an internal authenticated-bus marker that the leader validates for the assigned chat and strips before Bot API transport; unmarked or cross-chat threadless follower writes remain denied.
+- `owner` resolves the paired owner's private user ID for direct leader delivery, including when the configured forum target is a group. It is unavailable to followers.
 - `target` validates an explicit destination against the active profile and current runtime authority. A classic owner may target its paired private chat. A follower may target only its assigned thread or aggregate surface. A leader may target its own thread, aggregate surface, or a currently live bound thread for that profile. Unknown, stale, cross-profile, and unpaired targets are rejected.
 
 No scope selects another named profile. Profile activation remains session-local bridge state.

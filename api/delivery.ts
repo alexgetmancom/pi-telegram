@@ -10,6 +10,7 @@ export {
   sendTelegramChatAction,
   sendTelegramView,
   sendTelegramPhoto,
+  sendTelegramDocument,
   type SendTelegramViewOptions,
   type TelegramDeliveryChatAction,
   type TelegramDeliveryFailureReason,

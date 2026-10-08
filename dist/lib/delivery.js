@@ -90,6 +90,7 @@ export function createTelegramDeliveryTargetPolicyRuntime(deps) {
                 canDeliver: ownsDirect || deps.isFollowerRegistered(),
                 ownsDirect,
                 allowedChatId: deps.getAllowedChatId(),
+                ...(deps.getOwnerUserId ? { ownerUserId: deps.getOwnerUserId() } : {}),
                 followerTarget: deps.getFollowerTarget(),
                 leaderTarget: deps.getLeaderTarget(),
                 liveTargets: deps.listThreadRecords().map((record) => record.target),
@@ -117,6 +118,10 @@ export function resolveTelegramDeliveryAggregateTarget(view) {
     return !view.canDeliver || view.allowedChatId === undefined
         ? undefined
         : { chatId: view.allowedChatId };
+}
+export function resolveTelegramDeliveryOwnerTarget(view) {
+    return view.canDeliver && view.ownsDirect && view.ownerUserId !== undefined
+        ? { chatId: view.ownerUserId } : undefined;
 }
 /** @internal */
 export function isTelegramDeliveryExplicitTargetAuthorized(candidate, view) {
@@ -159,7 +164,9 @@ function resolveTelegramDeliveryTarget(scope, deps) {
         ? deps.getActiveTurnTarget()
         : scope.kind === "instance"
             ? deps.getInstanceTarget()
-            : deps.getAggregateTarget();
+            : scope.kind === "owner"
+                ? deps.getOwnerTarget?.()
+                : deps.getAggregateTarget();
     if (!target) {
         return failure("target-unavailable", `Telegram delivery ${scope.kind} target is unavailable.`);
     }
@@ -312,6 +319,34 @@ export function createTelegramDeliveryRuntime(deps) {
                 }
             });
         },
+        async sendDocument(filePath, view, options) {
+            if (!active)
+                return inactive();
+            const resolved = resolveTelegramDeliveryTarget(options.scope, deps);
+            if (!resolved.ok)
+                return failure(resolved.reason, resolved.message);
+            if (!deps.sendDocument)
+                return failure("runtime-unavailable", "Document delivery is unavailable.");
+            const rendered = render(view);
+            if (!rendered.ok)
+                return failure(rendered.reason, rendered.message);
+            if (rendered.value.length !== 1 || view.text.length > 900)
+                return failure("invalid-view", "Document caption is too long.");
+            const target = resolved.value;
+            return runForTarget(target, async () => {
+                if (!active)
+                    return inactive();
+                try {
+                    const id = await deps.sendDocument(target, filePath, rendered.value[0], getChunkTransportOptions(view, 0, 1, options.replyToMessageId));
+                    if (!active)
+                        return inactive();
+                    return { ok: true, value: createHandle(target, [id]) };
+                }
+                catch (error) {
+                    return active ? transportFailure("send", error, target) : inactive();
+                }
+            });
+        },
         async editView(handle, view) {
             const resolved = resolveHandle(handle);
             if (!resolved.ok)
@@ -428,6 +463,9 @@ export function createTelegramBridgeDeliveryRuntime(deps) {
         getAggregateTarget() {
             return resolveTelegramDeliveryAggregateTarget(getPolicyView());
         },
+        getOwnerTarget() {
+            return resolveTelegramDeliveryOwnerTarget(getPolicyView());
+        },
         isExplicitTargetAuthorized(target) {
             return isTelegramDeliveryExplicitTargetAuthorized(target, getPolicyView());
         },
@@ -475,6 +513,19 @@ export function createTelegramBridgeDeliveryRuntime(deps) {
                 ...(target.threadId === undefined ? {} : { message_thread_id: String(target.threadId) }),
                 ...(options.replyMarkup ? { reply_markup: JSON.stringify(options.replyMarkup) } : {}),
             }, "photo", filePath, "poster.jpg");
+            assertTransportActive();
+            deps.recordOwnership({ chatId: target.chatId, messageId: sent.message_id, target });
+            return sent.message_id;
+        },
+        async sendDocument(target, filePath, chunk) {
+            assertTransportActive();
+            if (!deps.photoApi)
+                throw new Error("Document transport is unavailable.");
+            const sent = await deps.photoApi.callMultipart("sendDocument", {
+                chat_id: String(target.chatId), caption: chunk.text,
+                ...(chunk.parseMode === "html" ? { parse_mode: "HTML" } : {}),
+                ...(target.threadId === undefined ? {} : { message_thread_id: String(target.threadId) }),
+            }, "document", filePath, filePath.split("/").at(-1) || "backup.tar.gz");
             assertTransportActive();
             deps.recordOwnership({ chatId: target.chatId, messageId: sent.message_id, target });
             return sent.message_id;
@@ -565,6 +616,15 @@ export async function sendTelegramPhoto(filePath, view, options) {
     if (typeof filePath !== "string" || !filePath.startsWith("/") || filePath.includes("\0"))
         return failure("invalid-view", "An absolute photo file is required.");
     return runDeliveryOperation(runtime => runtime.sendPhoto ? runtime.sendPhoto(filePath, view, options) : Promise.resolve(failure("runtime-unavailable", "Photo delivery is unavailable.")));
+}
+/** Deliver a local document through the authorized Telegram transport. */
+export async function sendTelegramDocument(filePath, view, options) {
+    const invalid = validateView(view);
+    if (invalid)
+        return invalid;
+    if (typeof filePath !== "string" || !filePath.startsWith("/") || filePath.includes("\0"))
+        return failure("invalid-view", "An absolute document file is required.");
+    return runDeliveryOperation(runtime => runtime.sendDocument ? runtime.sendDocument(filePath, view, options) : Promise.resolve(failure("runtime-unavailable", "Document delivery is unavailable.")));
 }
 /** @internal Edit an exact Telegram message through the currently bound runtime generation. */
 export async function editTelegramTargetView(target, messageId, view) {

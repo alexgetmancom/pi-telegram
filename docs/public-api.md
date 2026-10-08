@@ -219,7 +219,7 @@ This inventory maps the complete bridge capability plane to its supported extens
 
 ### Explicitly deferred
 
-- **Programmatic artifact/media delivery:** `telegram_attach` covers agent-authored artifacts, while companion JavaScript has no general file/media send contract. The first 0.21 delivery slice targets operational text/activity views; media should earn a typed extension only from a concrete companion use case.
+- **Programmatic artifact/media delivery:** `telegram_attach` covers agent-authored artifacts. Companion JavaScript has typed photo and document delivery through the existing authorized transport; Family backups use document delivery to the paired owner.
 - **General configuration mutation:** Companions own their configuration and Settings state. pi-telegram does not expose unrestricted mutation of `telegram.json`, profile identity, pairing, rendering, queue, or transport settings.
 - **Process and session control:** Reload, new-session, fork, resume, process launch, and arbitrary Pi slash-command dispatch remain outside the Telegram companion API until Pi exposes safe async extension hooks.
 

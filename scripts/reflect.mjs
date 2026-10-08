@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
-/** Daily family-memory reflection over every native Telegram session, without Telegram or host tools. */
+/** Daily family-memory reflection over every native Telegram session, without Telegram or model tools; the host supplies read-only CLI evidence. */
 import { readFile, readdir, mkdir, writeFile, rename } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -55,7 +57,63 @@ export async function collectTranscript(directory, window) {
   return messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
 
-export async function saveReflection(directory, before, result, window) {
+const execFileAsync = promisify(execFile);
+
+async function readCLI(command, args) {
+  let stdout, failed = false;
+  try {
+    ({ stdout } = await execFileAsync(join(homedir(), ".local/bin", command), args,
+      { timeout: 60000, maxBuffer: 8 * 1024 * 1024 }));
+  } catch (error) {
+    // A failed source must never masquerade as an empty journal.
+    failed = true;
+    stdout = error.stdout;
+    if (!stdout) throw new Error(`CLI read failed: ${command} ${args.join(" ")} (exit ${error.code ?? "unknown"})`);
+  }
+  let result;
+  try { result = JSON.parse(stdout); }
+  catch { throw new Error(`Invalid CLI JSON: ${command} ${args.join(" ")}`); }
+  if (failed && result.ok === true) throw new Error(`CLI read failed despite successful JSON: ${command} ${args.join(" ")}`);
+  return result;
+}
+
+export async function collectCLIEvidence(run = readCLI) {
+  const reads = [];
+  const read = async (command, args) => {
+    const source = `${command} ${args.join(" ")}`;
+    const result = await run(command, args);
+    if (result?.ok !== true || result.error || result.data === undefined) {
+      throw new Error(redact(`CLI evidence unavailable: ${source}: ${result?.error ?? "invalid result"}`));
+    }
+    const data = JSON.parse(redact(JSON.stringify(result.data)));
+    reads.push({ source, data });
+    return data;
+  };
+  const results = await Promise.allSettled([
+    read("botflix", ["stats", "--period", "30d"]),
+    read("botflix", ["history", "--limit", "500"]),
+    read("botflix", ["subscriptions"]),
+    read("botflix", ["library", "--limit", "500"]),
+    read("health", ["equipment", "list"]),
+    read("health", ["exercise", "list"]),
+    ...["alex", "maru"].map(async person => {
+      await read("health", ["training", "list", "--person", person, "--period", "30d"]);
+      const nutrition = await read("health", ["nutrition", "summary", "--person", person, "--period", "30d"]);
+      if (!Array.isArray(nutrition.rows)) throw new Error(`Invalid nutrition rows for ${person}`);
+      for (const row of nutrition.rows) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date)) throw new Error(`Invalid nutrition date for ${person}`);
+        await read("health", ["nutrition", "get", "--person", person, "--date", row.date]);
+      }
+    }),
+  ]);
+  const failures = results.filter(result => result.status === "rejected");
+  if (failures.length) throw new Error(failures.map(result => redact(result.reason.message)).join("; "));
+  // Keep context ordering independent of request completion order.
+  reads.sort((a, b) => a.source.localeCompare(b.source));
+  return { checkedAt: new Date().toISOString(), coverage: "Current CLI state; training, nutrition and playback cover the reported 30-day windows. Media history/library are limited to 500 entries; absence beyond coverage proves nothing.", reads };
+}
+
+export async function saveReflection(directory, before, result, window, evidence) {
   if (!result || typeof result.healthReport !== "string" || !result.healthReport.trim() || result.healthReport.length > 60000 ||
       !result.healthProposals || typeof result.healthProposals !== "object" || Array.isArray(result.healthProposals) || typeof result.report !== "string" || !result.report.trim() || result.report.length > 60000 || !result.updates || typeof result.updates !== "object" || Array.isArray(result.updates)) throw new Error("Reflection must return {updates, report, healthProposals, healthReport}");
   for (const [name, text] of Object.entries(result.updates)) {
@@ -71,12 +129,13 @@ export async function saveReflection(directory, before, result, window) {
   await mkdir(reports, { recursive: true, mode: 0o700 });
   const healthReports = join(reports, "health");
   await mkdir(healthReports, { recursive: true, mode: 0o700 });
+  const checked = evidence ? `\nСверка CLI: ${evidence.checkedAt}.\n${evidence.reads.map(read => `- ${read.source}`).join("\n")}\n` : "";
   const healthDrafts = Object.entries(result.healthProposals).map(([name, text]) =>
     `## ${name} — предлагаемый полный текст\n\n${text}`).join("\n\n");
   const files = { ...result.updates, [`reflections/${window.date}.md`]:
-    `# Рефлексия ${window.date}\n\nМодель: openai-codex/gpt-6-luna · max.\nПериод UTC: ${new Date(window.start).toISOString()} — ${new Date(window.end).toISOString()}${window.partial ? " (неполный день, тестовый запуск)" : ""}.\n\n${result.report}\n`,
+    `# Рефлексия ${window.date}\n\nМодель: openai-codex/gpt-6-luna · max.\nПериод UTC: ${new Date(window.start).toISOString()} — ${new Date(window.end).toISOString()}${window.partial ? " (неполный день, тестовый запуск)" : ""}.\n\n${checked}\n${result.report}\n`,
     [`reflections/health/${window.date}.md`]:
-      `# HP: рефлексия ${window.date}\n\nРежим: только предложения для ручного просмотра. Файлы здоровья не изменены.\nМодель: openai-codex/gpt-6-luna · max.\nПериод UTC: ${new Date(window.start).toISOString()} — ${new Date(window.end).toISOString()}${window.partial ? " (неполный день, тестовый запуск)" : ""}.\n\n${result.healthReport}\n\n${healthDrafts}\n` };
+      `# HP: рефлексия ${window.date}\n\nРежим: только предложения для ручного просмотра. Файлы здоровья не изменены.\nМодель: openai-codex/gpt-6-luna · max.\nПериод UTC: ${new Date(window.start).toISOString()} — ${new Date(window.end).toISOString()}${window.partial ? " (неполный день, тестовый запуск)" : ""}.\n\n${checked}\n${result.healthReport}\n\n${healthDrafts}\n` };
   for (const [name, text] of Object.entries(files)) {
     const path = join(directory, name);
     await writeFile(`${path}.tmp`, text, { mode: 0o600 });
@@ -103,6 +162,8 @@ async function main() {
     console.log(JSON.stringify({ ...counts, skipped: "no messages", reportsSaved: true }));
     return;
   }
+  const evidence = await collectCLIEvidence();
+  console.log(JSON.stringify({ event: "reflection_cli_checked", ...counts, checkedAt: evidence.checkedAt, sources: evidence.reads.map(read => read.source) }));
   const modelRuntime = await ModelRuntime.create({ agentDir });
   const model = modelRuntime.getModel("openai-codex", "gpt-6-luna");
   if (!model || !(await modelRuntime.getAvailable()).some(item => item.provider === model.provider && item.id === model.id)) throw new Error("GPT-6 Luna is unavailable; restore OpenAI Codex authorization");
@@ -116,14 +177,14 @@ async function main() {
   try {
     if (session.model?.id !== "gpt-6-luna" || session.thinkingLevel !== "max" || session.getActiveToolNames().length) throw new Error("Reflection model/thinking/tool configuration mismatch");
     const started = Date.now();
-    const prompt = `Review this day's text conversation in one pass. Compare with current memory. Assistant replies provide context, never proof. General family/cinema memory: return updates and report for automatic application. Health memory: return healthProposals and healthReport for manual review ONLY; proposals never change health files. Return ONLY {updates, report, healthProposals, healthReport} JSON with complete contents for proposed changed files. If nothing is new, the corresponding map is {} and report says "Новых семейных фактов нет." or "Новых подтверждённых фактов HP нет.". No code fences.\n${JSON.stringify({ window, memory: before, conversation: transcript })}`;
+    const prompt = `Review this day's text conversation in one pass. Compare with current memory AND the supplied read-only CLI evidence first. Do not propose duplicate CLI records in Markdown. Assistant replies provide context, never proof. General family/cinema memory: return updates and report for automatic application. Health memory: return healthProposals and healthReport for manual review ONLY; proposals never change health files. Return ONLY {updates, report, healthProposals, healthReport} JSON with complete contents for proposed changed files. If nothing is new, the corresponding map is {} and report says "Новых семейных фактов нет." or "Новых подтверждённых фактов HP нет.". No code fences.\n${JSON.stringify({ window, memory: before, cliEvidence: evidence, conversation: transcript })}`;
     console.log(JSON.stringify({ event: "reflection_started", ...counts, requests: 1, conversationCharacters: JSON.stringify(transcript).length,
       model: session.model.id, thinking: session.thinkingLevel }));
     await session.prompt(prompt);
     const last = session.messages.findLast(message => message.role === "assistant");
     if (!last || last.errorMessage || ["error", "aborted", "length"].includes(last.stopReason)) throw new Error(`Reflection failed: ${redact(last?.errorMessage ?? last?.stopReason ?? "no response")}`);
     const result = JSON.parse(session.getLastAssistantText() ?? "");
-    const updated = await saveReflection(family, before, result, window);
+    const updated = await saveReflection(family, before, result, window, evidence);
     console.log(JSON.stringify({ event: "reflection_completed", ...counts, elapsedSeconds: Math.round((Date.now() - started) / 1000), updated,
       report: join(family, "reflections", `${window.date}.md`),
       healthReport: join(family, "reflections/health", `${window.date}.md`), healthProposals: Object.keys(result.healthProposals), sessionId: session.sessionId }));

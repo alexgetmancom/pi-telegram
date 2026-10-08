@@ -6,7 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 const script = new URL("../scripts/reflect.mjs", import.meta.url);
-const { reflectionWindow, collectTranscript, redact, saveReflection } = await import(script.href);
+const { reflectionWindow, collectTranscript, redact, collectCLIEvidence, saveReflection } = await import(script.href);
 
 test("Reflection uses the complete previous Moscow calendar day and validates manual dates", () => {
   const day = reflectionWindow(undefined, new Date("2026-10-05T21:01:00Z"));
@@ -83,4 +83,36 @@ test("Reflection rejects unknown files and concurrent changes before writing any
     await writeFile(join(dir, "health/alex-training.md"), "live health edit");
     await assert.rejects(saveReflection(dir, before, result, day), /Memory changed/);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+
+test("Reflection reads both CLIs and full nutrition records before proposing journal changes", async () => {
+  const calls: string[] = [];
+  const evidence = await collectCLIEvidence(async (command: string, args: string[]) => {
+    calls.push(`${command} ${args.join(" ")}`);
+    if (args[0] === "nutrition" && args[1] === "summary") return { ok: true, data: { rows: [{ date: "2026-10-07" }] } };
+    if (args[0] === "training") return { ok: true, data: { sessions: [{ id: "2026-10-07-1", person: args[3], exercises: [{ name: "Corrected lateral raise", load_basis: "per_hand" }] }] } };
+    if (args[0] === "nutrition" && args[1] === "get") return { ok: true, data: { day: { date: "2026-10-07", meals: [{ name: "Breakfast" }] } } };
+    return { ok: true, data: { token: "private-value", records: [] } };
+  });
+  assert.equal(calls.length, 12);
+  for (const person of ["alex", "maru"]) {
+    assert.ok(calls.includes(`health training list --person ${person} --period 30d`));
+    assert.ok(calls.includes(`health nutrition get --person ${person} --date 2026-10-07`));
+  }
+  for (const call of ["botflix stats --period 30d", "botflix history --limit 500", "botflix subscriptions", "botflix library --limit 500", "health equipment list", "health exercise list"]) assert.ok(calls.includes(call));
+  assert.ok(!calls.some(call => /\b(save|sync|tick|export|refresh|download|subscribe|ack)\b/.test(call)));
+  assert.match(JSON.stringify(evidence), /2026-10-07-1/);
+  assert.match(JSON.stringify(evidence), /Corrected lateral raise/);
+  assert.match(JSON.stringify(evidence), /Breakfast/);
+  assert.ok(!JSON.stringify(evidence).includes("private-value"));
+  assert.match(evidence.coverage, /500/);
+  assert.deepEqual(evidence.reads.map((read: { source: string }) => read.source), [...calls].sort((a, b) => a.localeCompare(b)));
+});
+
+test("Failed or malformed CLI evidence cannot be treated as an empty successful journal", async () => {
+  await assert.rejects(collectCLIEvidence(async () => ({ ok: false, data: { rows: [] }, error: "source unavailable" })), /source unavailable/);
+  await assert.rejects(collectCLIEvidence(async () => ({ ok: true, data: { rows: [] }, error: "partial failure" })), /partial failure/);
+  await assert.rejects(collectCLIEvidence(async () => ({ ok: true, data: { rows: [{ date: "invalid" }] } })), /Invalid nutrition date/);
+  await assert.rejects(collectCLIEvidence(async () => ({ ok: true, data: {} })), /Invalid nutrition rows/);
 });
